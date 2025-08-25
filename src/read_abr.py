@@ -211,13 +211,22 @@ def get_categories(subjects, categorize="treatment"):
 
 
 def get_analyzed_click_data(
-    filename, AR, ABR4, subj, HPF, maxdur, scale: float = 1.0, invert: bool = False
+    filename,
+    AR,
+    ABR4,
+    subj,
+    HPF: Union[float, None] = None,
+    LPF: Union[float, None] = None,
+    maxdur: float = 10.0,
+    scale: float = 1.0,
+    invert: bool = False,
 ):
     pfiles = list(Path(filename).glob("*_click_*.p"))
     # f, ax = mpl.subplots(1, 1)  # for a quick view of the data
     if len(pfiles) > 0:
         waves, tb, metadata = AR.read_and_average_abr_files(
-            filename=str(pfiles[0]), high_pass_filter=HPF, maxdur=maxdur, pdf=None
+            filename=str(pfiles[0]), high_pass_filter=HPF, low_pass_filter=LPF,
+            maxdur=maxdur, pdf=None
         )
         sym = "D"
         # print("metadata: ", metadata, pfiles[0])
@@ -253,6 +262,7 @@ def get_analyzed_click_data(
             datatype="Click",
             sample_frequency=sample_frequency,
             highpass=HPF,
+            lowpass=LPF,
         )
         waves *= scale
         if invert:
@@ -272,13 +282,13 @@ def get_analyzed_click_data(
     # print(np.max(waves))
 
     WaveAnalyzer.analyze(timebase=tb, waves=waves[:, 0, :])
-    dbs = metadata["stimuli"]["dblist"] 
+    dbs = metadata["stimuli"]["dblist"]
     # print(dir(WaveAnalyzer))
     # f, ax = mpl.subplots(1,1)
     # for i in range(WaveAnalyzer.waves.shape[0]):
     #     ax.plot(tb, WaveAnalyzer.waves[i, :]/metadata["amplifier_gain"],
     #     )
-                 
+
     # mpl.show()
     # exit()
     print("  get analyzed click data: dbs: ", dbs)
@@ -286,20 +296,29 @@ def get_analyzed_click_data(
 
 
 def get_analyzed_tone_data(
-    filename, AR, ABR4, subj, HPF: float = 100.0, maxdur: float = 10.0, scale: float = 1.0, invert: bool = False
+    filename,
+    AR,
+    ABR4,
+    subj,
+    HPF: Union[float, None] = 100.0,
+    LPF: Union[float, None] = None,
+    maxdur: float = 10.0,
+    scale: float = 1.0,
+    invert: bool = False,
 ):
     pfiles = list(Path(filename).glob("*_interleaved_plateau_*.p"))
     # print("pfiles: ", len(pfiles))
     if len(pfiles) > 0:
         waves, tb, metadata = AR.read_and_average_abr_files(
-            filename=str(pfiles[0]), high_pass_filter=HPF, maxdur=maxdur, pdf=None
+            filename=str(pfiles[0]), high_pass_filter=HPF, 
+            low_pass_filter=LPF, maxdur=maxdur, pdf=None
         )
         sym = "D"
         # print("Read waves, shape= ", waves.shape)
         # print("metadata: ", metadata)
 
     else:
-        # sample frequency depends on whenth e data was collected.
+        # sample frequency depends on when the data was collected.
         # so we set it this way:
         subj_id = REX.re_subject.match(subj["name"]).group("subject")
 
@@ -309,6 +328,7 @@ def get_analyzed_tone_data(
             subdir=filename.name,
             datatype="Tone",
             highpass=HPF,
+            lowpass=LPF,
         )
         # print("Read waves, shape= ", waves.shape)
         # print("metadata: ", metadata)
@@ -319,8 +339,14 @@ def get_analyzed_tone_data(
     # print("subject : ", subj)
     export_for_abra_tones(subj, waves, metadata)
     # print("metadata: ", metadata)
-    return WaveAnalyzer, metadata['stimuli']['dblist'], metadata, metadata['stimuli']['dblist'], metadata['stimuli']['freqlist']
-#############################
+    return (
+        WaveAnalyzer,
+        metadata["stimuli"]["dblist"],
+        metadata,
+        metadata["stimuli"]["dblist"],
+        metadata["stimuli"]["freqlist"],
+    )
+    #############################
 
     if waves is None:  # no data for this stimulus type
         return None
@@ -529,7 +555,6 @@ def set_gain_and_scale(subj, AR):
     if "default" not in scd.keys():
         raise ValueError("'default' values missing from ABR_parameters")
 
-
     scale = scd["default"]["scale"]
     invert = scd["default"]["invert"]
     min_lat = scd["default"]["minimum_latency"]
@@ -625,7 +650,12 @@ def check_file(
         requested_stimulus_type,
     )
     if subj["filename"].name.lower() != requested_stimulus_type.lower():
-        print("failed to find matching file... ", subj["filename"].name, " requested: ", requested_stimulus_type)
+        print(
+            "failed to find matching file... ",
+            subj["filename"].name,
+            " requested: ",
+            requested_stimulus_type,
+        )
         return donefiles, stim_type, False
     # print(f"requested stimulus type: <{requested_stimulus_type}>, filename.name:  <{subj["filename"].name}>")
     # print("subj in tones?: ", subj["filename"].name in ["Tones", "Tone"])
@@ -638,17 +668,22 @@ def check_file(
             ):
                 stim_type = "Click"
         case "Tone" | "Tones":
-            if (subj["filename"].name in ["Tones", "Tone"]):
-            #     or (
-            #     subj["filename"].name == "Interleaved_plateau"
-            # ):
+            if subj["filename"].name in ["Tones", "Tone"]:
+                #     or (
+                #     subj["filename"].name == "Interleaved_plateau"
+                # ):
                 stim_type = "Tones"
-        case "Interleaved_plateau" | 'interleaved_plateau':
+        case "Interleaved_plateau" | "interleaved_plateau":
             if subj["filename"].name.lower() == "Interleaved_plateau".lower():
                 stim_type = "Interleaved_plateau"
 
         case _:
-            print("Requested stimulus type not recognized", requested_stimulus_type, "sub filename: ", subj["filename"].name)
+            print(
+                "Requested stimulus type not recognized",
+                requested_stimulus_type,
+                "sub filename: ",
+                subj["filename"].name,
+            )
             raise ValueError
     CP.cprint("g", f"    ***** checkfile: stim_type: {stim_type!s}, {fname:s}")
     if stim_type is None:
@@ -656,7 +691,7 @@ def check_file(
     return donefiles, stim_type, True
 
 
-def export_for_abra_clicks(subj: dict, dbs: list, waveana: object):
+def export_for_abra_clicks(subj: dict, dbs: list, waveana: object, outputpath: Union[Path, str] = 'abra'):
 
     nsamps = 244
     new_freq = 24414.0625
@@ -686,12 +721,14 @@ def export_for_abra_clicks(subj: dict, dbs: list, waveana: object):
     abrap = Path("abra")
     if not abrap.exists():
         abrap.mkdir()
-    df.to_csv(f"abra/Clicks/{subj['name']:s}_click_data.csv", index=False)
-    print("wrote to: ", f"abra/Clicks/{subj['name']:s}_click_data.csv")
+    outpath = Path(outputpath, 'Clicks', f"{subj['name']:s}_click_data.csv")
+    df.to_csv(outpath, index=False)
+    print("wrote to: ", outpath)
 
-def export_for_abra_tones(subj: dict, waves: np.ndarray, metadata: dict):
 
-    print("Exporting for ABRA tones: ", subj['subject'])
+def export_for_abra_tones(subj: dict, waves: np.ndarray, metadata: dict, outputpath: Union[Path, str] = 'abra'):
+
+    print("Exporting for ABRA tones: ", subj["subject"])
     nsamps = 244
     new_freq = 24414.0625
     newx = np.linspace(0, 10.0, num=nsamps)
@@ -708,7 +745,9 @@ def export_for_abra_tones(subj: dict, waves: np.ndarray, metadata: dict):
         fig, ax = mpl.subplots(waves.shape[0], waves.shape[1], figsize=(12, 8))
     for i, db in enumerate(dbs):
         for j, fr in enumerate(freqs):
-            wave_interpolated = np.interp(newx, oldx, waves[i, j, :nold])*1e6/metadata["amplifier_gain"]
+            wave_interpolated = (
+                np.interp(newx, oldx, waves[i, j, :nold]) * 1e6 / metadata["amplifier_gain"]
+            )
             row = {
                 "Sub. ID": subj["subject"],
                 "Freq(Hz)": float(fr),
@@ -720,7 +759,7 @@ def export_for_abra_tones(subj: dict, waves: np.ndarray, metadata: dict):
                 row.update({f"{n:d}": wave_interpolated[n]})
             ldb.append(row)
             if checkplot:
-                ax[i,j].plot(newx, wave_interpolated) # , label=f"{fr:.1f} Hz, {db:.1f} dB")
+                ax[i, j].plot(newx, wave_interpolated)  # , label=f"{fr:.1f} Hz, {db:.1f} dB")
                 ax[i, j].set_ylim(-5, 5)
         # print("Waveana waves: ", waveana.waves.shape, "sample freq: ", waveana.sample_freq)
     if checkplot:
@@ -729,8 +768,9 @@ def export_for_abra_tones(subj: dict, waves: np.ndarray, metadata: dict):
     abrap = Path("abra/Tones")
     if not abrap.exists():
         abrap.mkdir()
-    df.to_csv(f"abra/Tones/{subj['name']:s}_tone_data.csv", index=False)
-    print("Wrote to: ", f"abra/{subj['name']:s}_tone_data.csv")
+    outpath = Path(outputpath, 'Tones', f"{subj['name']:s}_tone_data.csv")
+    df.to_csv(outpath, index=False)
+    print("Wrote to: ", outpath)
     # exit()
 
 
@@ -739,6 +779,7 @@ def export_for_abra(
     requested_stimulus_type: str,
     AR: object,
     ABR4: object,
+    outputpath: Union[Path, str] = 'abra'
 ) -> dict:
     print("\n\nCALLING EXPORT FOR ABRA")
     donefiles = []
@@ -787,8 +828,9 @@ def export_for_abra(
                 AR,
                 ABR4,
                 subj,
-                AR.experiment["ABR_settings"]["HPF"],
-                AR.experiment["ABR_settings"]["maxdur"],
+                HPF=AR.experiment["ABR_settings"]["HPF"],
+                LPF=AR.experiment["ABR_settings"]["LPF"],
+                maxdur=AR.experiment["ABR_settings"]["maxdur"],
                 scale=scale,
                 invert=invert,
             )
@@ -797,7 +839,7 @@ def export_for_abra(
             #  print(waveana.waves.shape)
             # print(1./waveana.sample_freq)
 
-            export_for_abra_clicks(subj=subj, dbs=dbs, waveana=waveana)
+            export_for_abra_clicks(subj=subj, dbs=dbs, waveana=waveana, outputpath=outputpath)
         elif requested_stimulus_type in ["Tone", "Tones", "Interleaved_plateau"]:
             filename = Path(filename).parent
             scale, invert, min_lat, fit_index = set_gain_and_scale(subj, AR)
@@ -806,9 +848,10 @@ def export_for_abra(
                 filename,
                 AR,
                 ABR4,
-                subj,
-                AR.experiment["ABR_settings"]["HPF"],
-                AR.experiment["ABR_settings"]["maxdur"],
+                subj=subj,
+                HPF=AR.experiment["ABR_settings"]["HPF"],
+                LPF=AR.experiment["ABR_settings"]["LPF"],
+                maxdur=AR.experiment["ABR_settings"]["maxdur"],
                 scale=scale,
                 invert=invert,
             )
@@ -879,8 +922,9 @@ def do_one_subject(
                 AR,
                 ABR4,
                 subj,
-                AR.experiment["ABR_settings"]["HPF"],
-                AR.experiment["ABR_settings"]["maxdur"],
+                HPF=AR.experiment["ABR_settings"]["HPF"],
+                LPF=AR.experiment["ABR_settings"]["LPF"],
+                maxdur=AR.experiment["ABR_settings"]["maxdur"],
                 scale=scale,
                 invert=invert,
             )
@@ -1671,7 +1715,7 @@ def compute_click_io_analysis(
     return
 
     # this snext section saves the data to csv files,
-    # but also some other stuff we don't really need... 
+    # but also some other stuff we don't really need...
     df_io.to_csv("io_data.csv", index=False)
     df_abr.to_csv("abr_data.csv", index=False)  # saves in long form for R
     categories_done = [v[1] for v in categories_done]
@@ -2169,7 +2213,10 @@ def find_files_for_subject(
                     subj_data["Tones"].append(dset)
 
         # next check for pyabr3 files
-        if filename.name.startswith(("Interleaved_plateau", "interleaved_plateau")) and filename.is_dir():
+        if (
+            filename.name.startswith(("Interleaved_plateau", "interleaved_plateau"))
+            and filename.is_dir()
+        ):
             tone_files = filename.glob("*.p")
             # print("tone files: ", filename, list(tone_files))
             for i, tone_file in enumerate(tone_files):
@@ -2314,12 +2361,13 @@ if __name__ == "__main__":
             "/Volumes/Pegasus_004/ManisLab_Data3/abr_data/Reggie_NIHL": ["o", 3.0, 1.0],
         }
 
+        outputpath = Path(AR.experiment["ABR_settings"].get("outputpath", "abra"))
         subdata = get_datasets(directory_names, filter="Glyt2EGFP")
         print("Subdata: ", subdata.keys())
         # exit()
         # select subjects for tuning analysis parameters in the configuration file.
         tests = False
-        stim_type ="Tones"
+        stim_type = "Click"
         # stim_type = "Interleaved_plateau"
         # stim_type="Click"
         if tests:
@@ -2340,9 +2388,10 @@ if __name__ == "__main__":
         # exit()
         # uncomment this to write the click csv files for the ABRA program.
         for subj in subdata[stim_type]:
-            print("Subject: ", subj
-            )
-            export_for_abra(AR=AR, ABR4=ABR4, subj = subj, requested_stimulus_type=stim_type)
+            print("Subject: ", subj)
+            print("output path: ", outputpath)
+            export_for_abra(AR=AR, ABR4=ABR4, subj=subj, requested_stimulus_type=stim_type,
+                            outputpath=outputpath)
         exit()
 
         # stim="Click"
@@ -2381,4 +2430,3 @@ if __name__ == "__main__":
         # plot_tone_map_data(ax, all_tone_map_data=all_tone_map_data)
 
     # mpl.show()
-

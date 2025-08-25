@@ -169,7 +169,7 @@ class AnalyzeABR:
         return dBSPL_corrected
 
     def average_within_traces(
-        self, fd, i, protocol, date, high_pass_filter: Union[float, None] = None
+        self, fd, i, protocol, date, high_pass_filter: Union[float, None] = None, low_pass_filter: Union[float, None] = None,
     ):
         # _i_ is the index into the acquisition series. There is one file for each repetition of each condition.
         # the series might span a range of frequencies and intensities; these are
@@ -211,6 +211,10 @@ class AnalyzeABR:
             data = self.FILT.SignalFilter_HPFButter(
                 data, high_pass_filter, sample_rate, NPole=4, bidir=True
             )
+        if low_pass_filter is not None:
+            data = self.FILT.SignalFilter_LPFButter(
+                data, low_pass_filter, sample_rate, NPole=4, bidir=True
+            )
         # tile the traces.
         # first interpolate to 100 kHz
         # If you don't do this, the blocks will precess in time against
@@ -231,7 +235,7 @@ class AnalyzeABR:
         return sub_array, tb100, newrate
 
     def average_across_traces(
-        self, fd, i, protocol, date, high_pass_filter: Union[float, None] = None
+        self, fd, i, protocol, date, high_pass_filter: Union[float, None] = None, low_pass_filter: Union[float, None] = None
     ):
         """average_across_traces for abrs with multiple stimuli in a trace.
         This function averages the responses across multiple traces.
@@ -288,6 +292,10 @@ class AnalyzeABR:
             # print("average across traces hpf: ", high_pass_filter, d["record_frequency"])
             data = self.FILT.SignalFilter_HPFButter(
                 data, HPF=high_pass_filter, samplefreq=d["record_frequency"], NPole=4, bidir=True
+            )
+        if low_pass_filter is not None:
+            data = self.FILT.SignalFilter_LPFButter(
+                data, low_pass_filter, samplefreq=d["record_frequency"], NPole=4, bidir=True
             )
         # tile the traces.
         # first linspace to 100 kHz
@@ -917,6 +925,7 @@ class AnalyzeABR:
         amplifier_gain=1e4,
         scale: str = "V",
         high_pass_filter: Union[float, None] = None,
+        low_pass_filter: Union[float, None] = None,
         maxdur: Union[float, None] = None,
         pdf: Union[object, None] = None,
     ):
@@ -969,12 +978,14 @@ class AnalyzeABR:
 
             for i, db in enumerate(dblist):
                 for j, fr in enumerate(frlist):
+                    print("HPF, LPF: ", high_pass_filter, low_pass_filter)
                     x, tb, sample_rate = self.average_within_traces(
                         fd,
                         n,
                         protocol,
                         date,
                         high_pass_filter=high_pass_filter,
+                        low_pass_filter=low_pass_filter,
                     )
                     if i == 0 and j == 0:
                         abr_data = np.zeros((len(dblist), len(frlist), len(x)))

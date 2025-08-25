@@ -39,7 +39,7 @@ class find_datasets:
 
 class READ_ABR4:
     def __init__(self):
-        self.sample_freq = None # default for matlab ABR4 program (interpolzted)
+        self.sample_freq = None  # default for matlab ABR4 program (interpolzted)
         self.amplifier_gain = 1e4  # default for ABR4 recording (set externally on Grass P511J)
         self.FILT = filter_util.Utility()
         self.invert = False
@@ -54,6 +54,7 @@ class READ_ABR4:
         subdir: str = "Tone",  # or "Clicks"
         run: str = "20220518-1624",
         highpass: Union[float, None] = None,
+        lowpass: Union[float, None] = None,
         lineterm="\r",
         fold: bool = False,  # fold flag - for when there are 2 responses in a waveform.
     ):
@@ -83,7 +84,7 @@ class READ_ABR4:
 
         if datatype not in ["Click", "Tone"]:
             raise ValueError(f"Unknown datatype: {datatype:s}")
-        
+        print("READ_ABR4.read_dataset filters: ", highpass, lowpass)
         if datatype == "Click":
             # find click runs for this subject:
             click_runs = self.find_click_files([datapath], subject="", subdir="")
@@ -92,17 +93,23 @@ class READ_ABR4:
                 return None, None
             for run in click_runs:
                 waves, tb = self.get_clicks(
-                    datapath, subject, subdir, click_runs[run], sample_freq=sample_frequency, highpass=highpass,
-                    fold = fold
+                    datapath,
+                    subject,
+                    subdir,
+                    click_runs[run],
+                    sample_freq=sample_frequency,
+                    highpass=highpass,
+                    lowpass=lowpass,
+                    fold=fold,
                 )
-                self.sample_freq = 1./np.mean(np.diff(tb))
+                self.sample_freq = 1.0 / np.mean(np.diff(tb))
                 print("self sample freq; ", self.sample_freq)
 
         elif datatype == "Tone":
             self.sample_freq = sample_frequency  # tone data is sampled at 100 kHz
             tone_runs_avg, tb = self.find_tone_files(datapath, "", "", highpass=highpass, fold=fold)
             if tone_runs_avg is None:
-                return None, None     
+                return None, None
             # now, re-organize the data into a 3d array for the main analysis program
             # The frequency columns must be sorted and aligne
             self.frlist = list(tone_runs_avg.keys())
@@ -120,7 +127,9 @@ class READ_ABR4:
                             waves[idb, ifr, :] = tone_runs_avg[(freq, db)][0].squeeze()
                         n += 1
             except:
-                raise ValueError(f"Error in reading tone data: {n:d}, {datapath!s}, {subject!s}, {freq}, {db}")
+                raise ValueError(
+                    f"Error in reading tone data: {n:d}, {datapath!s}, {subject!s}, {freq}, {db}"
+                )
                 # print("readdataset wave shape: ", waves.shape)
 
         if metadata is None:
@@ -141,6 +150,7 @@ class READ_ABR4:
                 "genotype": "ND",
                 "record_frequency": self.sample_freq,
                 "highpass": highpass,
+                "lowpass": lowpass,
             }
         else:
 
@@ -161,6 +171,7 @@ class READ_ABR4:
                 "genotype": "ND",
                 "record_frequency": self.sample_freq,
                 "highpass": highpass,
+                "lowpass": lowpass,
             }
         # before returning, sort the waveforms in ascending order of level.
         dbs = metadata["stimuli"]["dblist"]
@@ -172,7 +183,6 @@ class READ_ABR4:
             metadata["stimuli"]["dblist"] = dbs[::-1]
             exit()
         return waves, tb, metadata
-
 
     def find_click_files(self, datapath, subject, subdir):
         print(datapath, subject, subdir)
@@ -198,7 +208,9 @@ class READ_ABR4:
             # print("Found runs: ", click_runs)
             return click_runs
 
-    def find_tone_files(self, datapath, subject, subdir, highpass: Union[float, None] = None, fold:bool=False):
+    def find_tone_files(
+        self, datapath, subject, subdir, highpass: Union[float, None] = None, fold: bool = False
+    ):
         """find_tone_files find the tone files in this directory
         The result is a dictionary whose keys are the frequency and intensity pairs,
         and whose values are a list of the csv (txt) files for the negative and positive
@@ -257,11 +269,13 @@ class READ_ABR4:
             if not khz_file.is_file():
                 continue  # probably a click group, so skip the freqs.
             # old
-            khz_list_1 = pd.read_csv(khz_file, sep=r"[ \t\r\n]+", header=None, engine="python").values.squeeze()
+            khz_list_1 = pd.read_csv(
+                khz_file, sep=r"[ \t\r\n]+", header=None, engine="python"
+            ).values.squeeze()
             # sometimes in rows without a return
             # khz_list_2 = pd.read_csv(khz_file, sep=r"[ \t]+", header=None, engine="python").values.squeeze()
             # # print(type(khz_list_1), type(khz_list_2), khz_list_1.shape, khz_list_1.ndim, khz_list_2.ndim, khz_list_1.shape, khz_list_2.shape)
-            if khz_list_1.ndim == 0: 
+            if khz_list_1.ndim == 0:
                 khz_list_1 = [khz_list_1]
             # elif khz_list_1.ndim == 1:
             #     khz_list = khz_list_1
@@ -283,14 +297,11 @@ class READ_ABR4:
                         tone_runs_p[run_key] = []
         if len(datafiles) == 0:
             return None, None
-        # print(" SPL List : ", spl_list)
+
         # now read the data into the dictionaries
         # and assign the data to the appropriate key in the dictionary
-        # print("runfiles: ", run_files)
-        # print("datafiles: ", datafiles)
+
         for datafile in datafiles:
-            # print(f"\n{'*'*80:s}")
-            # print("datafile: ", datafile)
             match_tonefile = re.match(re_tone_pn, datafile.name)
             if match_tonefile is None:
                 continue  # not a tone file
@@ -319,9 +330,9 @@ class READ_ABR4:
             )
             data = data.values
 
-            if np.isnan(data[-1,:]).any():
-                data[-1,:] = data[-2,:]
-             
+            if np.isnan(data[-1, :]).any():
+                data[-1, :] = data[-2, :]
+
             data = np.array(data).T
             for ispl, spl in enumerate(spl_list):
                 spl_asint = int(float(spl))
@@ -434,7 +445,17 @@ class READ_ABR4:
 
         mpl.show()
 
-    def get_clicks(self, datapath, subject, subdir, run, sample_freq: float = None, highpass: Union[float, None] = None, fold:bool=False):
+    def get_clicks(
+        self,
+        datapath,
+        subject,
+        subdir,
+        run,
+        sample_freq: float = None,
+        highpass: Union[float, None] = None,
+        lowpass: Union[float, None] = None,
+        fold: bool = False,
+    ):
         # do a quick check to see if there are subdirectories for tones and clicks:
         # print("subdir: ", subdir)
         if datapath.name == "Click":
@@ -458,7 +479,7 @@ class READ_ABR4:
                 raise FileNotFoundError(f"Did not find SPL file: {spl_file!s}")
 
         pos_file = Path(datapath, run["p"])
-        neg_file = Path(datapath, run['n'])
+        neg_file = Path(datapath, run["n"])
         # pos_file = Path(datapath, subject, subdir, run["p"])
         # neg_file = Path(datapath, subject, subdir, run["n"])
         if not pos_file.is_file():
@@ -505,7 +526,7 @@ class READ_ABR4:
                 posf[pc] = pvals
         npoints = len(posf[spllist[0]])
         # print("Posf values: ", posf[spllist[0]].values)
-        # exit()      
+        # exit()
         # print(f"Number of points: {npoints:d}")
         self.sample_freq = sample_freq
         tb = np.linspace(0, npoints * (1.0 / self.sample_freq), npoints)
@@ -548,6 +569,13 @@ class READ_ABR4:
                 for j in range(waves.shape[1]):
                     waves[i, j] = self.FILT.SignalFilter_HPFButter(
                         waves[i, j], HPF=highpass, samplefreq=self.sample_freq, NPole=4, bidir=True
+                    )
+        if lowpass is not None:
+            # print("get clicks: lowpass, samplefreq: ", lowpass, self.sample_freq)
+            for i in range(waves.shape[0]):
+                for j in range(waves.shape[1]):
+                    waves[i, j] = self.FILT.SignalFilter_LPFButter(
+                        waves[i, j], LPF=lowpass, samplefreq=self.sample_freq, NPole=4, bidir=True
                     )
 
         if self.invert:
