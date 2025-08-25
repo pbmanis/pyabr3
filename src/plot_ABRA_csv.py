@@ -14,11 +14,14 @@ from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix, classification_report
 
+import analyze_abr
+AR = analyze_abr.AnalyzeABR()
+
 mpl.rcParams["text.latex.preamble"] = r"\DeclareUnicodeCharacter{03BC}{\ensuremath{\mu}}"
 mpl.rcParams["font.family"] = "serif"
 mpl.rcParams["font.size"] = 10
 
-palette = sns.color_palette("tab10")[:3]
+# palette = sns.color_palette("tab10")[:3]
 """ Takes output from the ABRA program (github.com/manorlab)
 """
 
@@ -629,6 +632,9 @@ def plot_IO_data(
 
     npl = 0
     for i, treat in enumerate(treats):
+        print("i: ", i, treat)
+        if treat == "Unknown":
+            continue
         data = df[df["treatment"] == treat]
 
         for ns, s in enumerate(data["subject"].unique()):
@@ -894,6 +900,9 @@ if __name__ == "__main__":
     re_cba_path = Path("/Users/pbmanis/Desktop/Python/RE_CBA")
     if not re_cba_path.is_dir():
         raise ValueError(f"Path {re_cba_path} is not a directory")
+    exp_path = Path(re_cba_path, "config", "experiments.cfg")
+    AR.get_experiment(exp_path, "GlyT2_NIHL")
+
     print("Reading coding file: ", coding_file, coding_file.is_file())
     if coding_file.is_file():
         coding_df = pd.read_excel(coding_file, sheet_name="coding")
@@ -904,6 +913,9 @@ if __name__ == "__main__":
     # stim_type = "Click"
     stim_type = "Click"
     treat_order = ["Sham", "NE2wks106", "NE2wks115"]
+    plot_colors = AR.experiment['plot_colors']
+
+    palette = sns.color_palette([plot_colors['bar_background_colors'][t] for t in treat_order], n_colors=len(treat_order))
     strain = "GlyT2"
     selection = "all"  # "ephys"  # or "ephys"  # or "all" or list of subjects like ["WN8", "XR10"].
     # strain = "VGATEYFP"
@@ -919,10 +931,12 @@ if __name__ == "__main__":
 
             if strain == "GlyT2":
                 click_IO_file = Path(
-                    re_cba_path, "abra", "GlyT2EGFP_2025-08-07T15-39_export_click_IO.csv"
+                    # re_cba_path, "abra", "GlyT2EGFP_2025-08-07T15-39_export_click_IO.csv"
+                    re_cba_path, "abra", "GlyT2EGFP_2025-08-25T16-54_export_click_IO.csv"
                 )
                 click_threshold_file = Path(
-                    re_cba_path, "abra", "GlyT2EGFP_2025-08-07T15-39_export_click_thresholds.csv"
+                    # re_cba_path, "abra", "GlyT2EGFP_2025-08-07T15-39_export_click_thresholds.csv"
+                    re_cba_path, "abra", "GlyT2EGFP_2025-08-25T16-53_export_click_thresholds.csv"
                 )
                 cross = ["C57Bl/6", "NF107"]
                 split_col = "cross"
@@ -943,6 +957,7 @@ if __name__ == "__main__":
                     "split_col": split_col,
                     "cross_order": cross,
                     "selection": selection,
+                    "plot_colors": plot_colors,
                 }
                 plot_IO_data(
                     filename=click_IO_file,
@@ -960,6 +975,7 @@ if __name__ == "__main__":
                     "split_col": split_col,
                     "cross_order": cross,
                     "selection": selection,
+                    "plot_colors": plot_colors,
                 }
             kwds2 = {
                 "individual": False,
@@ -968,6 +984,7 @@ if __name__ == "__main__":
                 "split_col": split_col,
                 "cross_order": cross,
                 "selection": selection,
+                "plot_colors": plot_colors,
             }
             # now the 3 panel plot
             kwds3 = kwds2.copy()
@@ -1031,6 +1048,7 @@ if __name__ == "__main__":
                 "split_col": split_col,
                 "cross_order": cross,
                 "selection": selection,
+                "plot_colors": plot_colors,
             }
             kwds_tone = kwds.copy()
             plot_tone_thresholds(
