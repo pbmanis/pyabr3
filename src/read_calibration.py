@@ -1,4 +1,5 @@
 import numpy as np
+import datetime
 from pathlib import Path
 import scipy.io
 from pyqtgraph import configfile
@@ -61,7 +62,7 @@ def get_calibration_data(fn):
 
 def get_microphone_calibration(fn):
     dm = scipy.io.loadmat(fn, appendmat=False,  squeeze_me=True)
-    print(fn)
+    # print(fn)
     """
      MIC is a structure with the following fields:
 
@@ -86,8 +87,7 @@ def get_microphone_calibration(fn):
     micdata["date"] = d[6]
     micdata["dBPerVPa"] = d[7]
     micdata["mVPerPa"] = d[8]
-
-    print(micdata)
+    # print(micdata)
     return micdata
 
 def plot_calibration(caldata, plot_target = None):
@@ -135,9 +135,7 @@ def plot_calibration(caldata, plot_target = None):
 
         if plot_target is None:
             pg.exec()
-
-            
-if __name__ == "__main__":
+def main():
     import sys
     configtype = "lab"
     cmd = sys.argv[1:]
@@ -158,4 +156,41 @@ if __name__ == "__main__":
 
     d = get_calibration_data(fn)
     plot_calibration(d)
+
+            
+if __name__ == "__main__":
+
+    calfiles = list(Path('calfiles/').glob('microphone*.cal'))
+    f, ax = mpl.subplots(2,1, figsize=(6,8))
+    day = []
+    cal = []
+    db_pA = []
+    format_string = "%d-%b-%Y" #  %H:%M:%S"
+    for calfile in calfiles:
+        mic_cal = get_microphone_calibration(calfile)
+        if 0.5 >= mic_cal["mVPerPa"] or mic_cal["mVPerPa"] >= 10:
+            continue
+        cal.append(mic_cal["mVPerPa"])
+        db_pA.append(mic_cal["dBPerVPa"])
+        datetime_object = datetime.datetime.strptime(mic_cal["date"], format_string)
+        day.append(datetime_object)
+    i_dsort = np.argsort(day)
+    day = np.array(day)[i_dsort]
+    cal = np.array(cal)[i_dsort]
+    db_pA = np.array(db_pA)[i_dsort]
+    ax[0].plot(day, cal, 'o-')
+    ax[0].set_xlabel("Date", fontsize=10   )
+    ax[0].tick_params("x", rotation=45)
+    ax[0].set_ylabel("mV/Pa", fontsize=10)
+    ax[0].set_title("Microphone Calibration Over Time", fontsize=11)
+    ax[0].grid(True, linestyle='--', linewidth=0.5)
+    ax[0].set_ylim(3.0,4.5)
+    ax[1].plot(day, db_pA, 'o-')
+    ax[1].set_xlabel("Date", fontsize=10)
+    ax[1].tick_params("x", rotation=45)
+    ax[1].set_ylabel("dB/V/Pa", fontsize=10)
+    ax[1].grid(True, linestyle='--', linewidth=0.5)
+    ax[1].set_ylim([-52,-42])
+    f.tight_layout()
+    mpl.show()
     # get_microphone_calibration("calfiles/microphone_7016#10252.cal")
