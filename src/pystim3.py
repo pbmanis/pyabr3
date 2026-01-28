@@ -501,7 +501,7 @@ class PyStim:
         # dur = postduration + n_wave / float(self.Stimulus.RP21_out_sampleFreq)
         
         if self.stim_dur is None:
-            raise ValueError("Stimulus duration must be st before computing acquisition points")
+            raise ValueError("Stimulus duration must be set before computing acquisition points")
         self.acquisition_points = int(np.ceil(self.stim_dur * in_sampleFreq))
         # make acquisition a multiple of 1024 points
         n = int(self.acquisition_points / block_size)
@@ -713,9 +713,10 @@ class PyStim:
                 else:
                     time.sleep(0.05)
 
-        self.ch1 = self.databuffer.read(None)
+        if "RP21" in self.State.hardware:
+            self.ch1 = self.databuffer.read(None)
         # print(self.ch1.shape)
-        self.RP21_circuit.stop()
+            self.RP21_circuit.stop()
 
         self.State.NIDAQ_task = None
 
