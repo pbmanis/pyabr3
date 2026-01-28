@@ -1,33 +1,40 @@
 #!/cygdrive/c/Python25/python.exe -i
 ## Workaround for symlinks not working in windows
-import sys, time, numpy
+import sys
+import time
+
+
 # sys.path.append("..\\cheader")
 from nidaq import cheader
 from nidaq import NIDAQ
 import nidaq
 import nidaqmx
 from nidaqmx.constants import AcquisitionType, Edge, VoltageUnits
+import numpy as np
+import pyqtgraph as pg
+import win32com.client
+
 
 print("Assert num devs > 0:")
 assert(len(NIDAQ.listDevices()) > 0)
 print("  OK")
 print("devices: %s" % NIDAQ.listDevices())
 
-print("getDevice:")
+# print("getDevice:")
 dev0 = NIDAQ.getDevice(b'Dev1')
-print("  ", dev0)
-print(dir(dev0))
-print("\nAnalog Channels:")
-# print "  AI: ", dev0.listAIChannels()
-print("  AO: ", dev0.listAOChannels())
+# print("  ", dev0)
+# # print(dir(dev0))
+# print("\nAnalog Channels:")
+# # print "  AI: ", dev0.listAIChannels()
+# print("  AO: ", dev0.listAOChannels())
 
-print("\nDigital ports:")
-print("  DI: ", dev0.listDIPorts())
-print("  DO: ", dev0.listDOPorts())
+# print("\nDigital ports:")
+# print("  DI: ", dev0.listDIPorts())
+# print("  DO: ", dev0.listDOPorts())
 
-print("\nDigital lines:")
-print("  DI: ", dev0.listDILines())
-print("  DO: ", dev0.listDOLines())
+# print("\nDigital lines:")
+# print("  DI: ", dev0.listDILines())
+# print("  DO: ", dev0.listDOLines())
 
 def finiteReadTest():
   task = dev0.createTask()
@@ -56,40 +63,57 @@ def contReadTest():
     t = time.time()
   task.stop()
 
+def initialize_attnenuator():
+  PA5 = win32com.client.Dispatch("PA5.x")
+  PA5.ConnectPA5("USB", 1)
+  PA5.SetAtten(120.0)
+  PA5.ConnectPA5("USB", 2)
+  PA5.SetAtten(120.0)
+  return PA5
 
 ## Output task
 
-def outputTest():
+def outputTest(duration:float=0.1, freq:float=1000.0, isi:float=0.2, USB_number:int=1, plotwave:bool=True):
   with nidaqmx.Task() as task:
-    print(dir(task))
+    # print(dir(task))
     #   task = dev0.createTask()
     # task.CreateAOVoltageChan("/Dev1/ao0", "ao0", -10., 10., nidaq.Val_Volts, None)
     # print('HERE!!!')
+    PA5 = initialize_attnenuator()
     task.ao_channels.add_ao_voltage_chan("/dev1/ao0", min_val=-10., max_val=10.)
-    clock = 10000.0
-    duration = 1.0 # seconds
+    task.ao_channels.add_ao_voltage_chan("/dev1/ao1", min_val=-10., max_val=10.)
+    clock = 100000.0
+    # duration = 0.5 # seconds
     ndata = int(duration*clock)
-    freq = 1000.0
+    # freq = 1000.0
     task.timing.cfg_samp_clk_timing(clock, source="",
                                     active_edge=Edge.RISING, 
                                     sample_mode=AcquisitionType.FINITE, samps_per_chan=ndata)
-    t = numpy.arange(0, duration, 1./clock)
-    data = numpy.ones((ndata,), dtype=numpy.float64)*numpy.sin(2.0*numpy.pi*freq*t)
-    import pyqtgraph as pg
-    import sys
-    pg.plot(data)
-    if (sys.flags.interactive != 1) or not hasattr(pg.QtCore, "PYQT_VERSION"):
-          pg.QtGui.QGuiApplication.instance().exec()
-
-    print(len(data), data.max(), data.min())
+    t = np.arange(0, duration, 1./clock)
+    if t.size > ndata:
+      t = t[:ndata]
+    data = np.zeros((2, ndata))
+    data[0, :] = np.ones((ndata), dtype=np.float64)*np.sin(2.0*np.pi*freq*t)
+    data[1, :] = np.zeros(ndata)
+    data[1, 0] = 5.0
+  
+    if plotwave:
+       pg.plot(data)
+       if (sys.flags.interactive != 1) or not hasattr(pg.QtCore, "PYQT_VERSION"):
+            pg.QtGui.QGuiApplication.instance().exec()
+    PA5.ConnectPA5("USB", USB_number)
+    PA5.SetAtten(10.0)
+    # print(len(data), data.max(), data.min())
     # data[200:400] = 5.0
     # data[600:800] = 5.0
-    task.write(data)
-    task.start()
-    time.sleep(duration)
-    task.stop()
+    for i in range(10):
+      task.write(data)
+      task.start()
+      time.sleep(duration)
+      task.stop()
+      time.sleep(isi)
   
-
+    PA5.SetAtten(120.0)
 
 
 ## Synchronized tasks
@@ -102,7 +126,7 @@ def syncADTest():
   task2.CreateDIChan("/Dev1/port0", "di0", nidaq.Val_ChanForAllLines)
   task2.CfgSampClkTiming("/Dev1/ai/SampleClock", 10000.0, nidaq.Val_Rising, nidaq.Val_FiniteSamps, 1000)
   
-  data1 = numpy.zeros((1000,), dtype=numpy.float64)
+  data1 = np.zeros((1000,), dtype=np.float64)
   data1[200:400] = 5.0
   data1[600:800] = 5.0
   task2.start()
@@ -133,7 +157,7 @@ def syncIOTest():
   #task2.SetSyncPulseSrc("/Dev1/SyncPulse")
 
 
-  data1 = numpy.zeros((1000,), dtype=numpy.float64)
+  data1 = np.zeros((1000,), dtype=np.float64)
   data1[200:400] = 5.0
   data1[600:800] = 5.0
   print("Wrote samples:", task2.write(data1))
@@ -147,7 +171,7 @@ def syncIOTest():
   return data2
 
 
-outputTest()
+
 
 
 
@@ -189,3 +213,6 @@ outputTest()
 
 ##analogTest(dev0)
 ##digitalTest()
+
+if __name__ == "__main__":
+   outputTest(plotwave=False)
