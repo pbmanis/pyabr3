@@ -32,6 +32,35 @@ To play a tone pip:
 python tests/play_test_sounds.py pip
 `
 
+Run Pyabr3
+==========
+
+1. Start pyabr3:
+
+    `
+    python src/pyabr3.py
+    `
+
+This brings up a GUI. 
+
+2. Select a protocol from the Protocol dropdown list.
+
+3. Fill out the Subject Data fields.
+
+4. Select and action:
+    a. _Test Acquisition_: Just plays the signals and acquires, without saving.
+    b. _Start Acquisition_: Present and acquire, saving data.
+    c. _Pause_: Pause acquisition (for anesthesia, etc.)
+    d. _Resume_: Resume after a pause. 
+    e. _Stop_: Stop acquisition (saves data to that point)
+    
+
+Status
+------
+
+Indicators about the devices, operating mode, SPL, frquenci, and progress in the protocol. 
+
+
 
 
 Included modules
