@@ -47,7 +47,7 @@ def build_parametertree(known_protocols, current_protocol, stimuli:dict):
                     "name": "stimulus_period",
                     "type": "float",
                     "value": 1,
-                    "limits": [0.1, 10.0],
+                    "limits": [0.005, 10.0],
                 },  # seconds
                 {
                     "name": "nstim",
