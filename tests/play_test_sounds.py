@@ -187,7 +187,7 @@ def play(args):
                 dbspl=level,
                 ramp="linear",
                 ramp_duration=1e-2,
-                f0=4000,
+                f0=2000,
                 pip_duration=0.4,
                 pip_start=[50e-3],
                 amp_group_size=8,
