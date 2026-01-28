@@ -212,7 +212,7 @@ class WaveGenerator:
                             dbspl=dbref,  # sets to 1V output (1Pa = 94 dbSPL)
                             pip_duration=self.protocol["stimuli"]["stimulus_duration"],
                             ramp_duration=self.protocol["stimuli"]["stimulus_risefall"],
-                            pip_start=[s0 + n * dt],
+                            pip_start=[s0 + (n * dt)],
                             alternate=False,  # do alternation separately here
                         )
                         self.dblist.append(dbspl_nominal)
