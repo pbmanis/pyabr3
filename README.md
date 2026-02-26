@@ -34,6 +34,7 @@ python tests/play_test_sounds.py pip
 
 Run Pyabr3
 ==========
+Important note before starting: Make sure that calibration was conducted in Matlab (ideally no longer than a week before experiment). Once calibrations are done (chk75db_MF1.cal, frequency_MF1.cal, and microphone_7016#10252.cal) transfer them to _This PC > Desktop > pyabr > calfiles_. Old calibration files go into folders, ones in use stay out of folders. This is important for proper calibration of interleaved plateau protocol.
 
 1. Start pyabr3:
 
@@ -53,7 +54,12 @@ This brings up a GUI.
     c. _Pause_: Pause acquisition (for anesthesia, etc.)
     d. _Resume_: Resume after a pause. 
     e. _Stop_: Stop acquisition (saves data to that point)
-    
+        Note: I typically do 2-3 full waves, or 1024-1536 reps before stopping
+
+5. When finished, hit _Quit_ to exit the progam
+6. Saved data will be found in _This PC > Desktop > pyabr > abr_data_
+    Note: Be sure to move all data before you start another run, as it will be saved in the same directory.      
+
 
 Status
 ------
