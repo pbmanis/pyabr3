@@ -384,6 +384,8 @@ class PyStim:
             )
 
         self.RP21_circuit = self.RP21_proj.load_circuit(self.RP21_rcxfile, "RP2")
+        print(f"Using: {self.RP21_rcxfile}")
+        # acquisition_mode = 'calibrate'
         if acquisition_mode == "abr":
             self.samp_cof_flag = 2  # set for 24 kHz
         elif acquisition_mode == "calibrate":
