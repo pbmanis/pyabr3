@@ -18,6 +18,7 @@ from pyqtgraph.Qt import QtCore, QtWidgets
 from src.calibration.engine import HISTORY_DIR
 
 FILE_PATTERN = "frequency_*.cal"
+BROWSE_FILTER = "Speaker calibration files (frequency_*.cal)"
 TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 HEADER_TIME_FORMAT = "%a %b %d %H:%M:%S %Y"
 MAT_HEADER_BYTES = 116
@@ -68,8 +69,8 @@ class CalibrationFileChooser(QtWidgets.QDialog):
         header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         self.table.doubleClicked.connect(self.accept)
         self.folder_label = QtWidgets.QLabel()
-        folder_button = QtWidgets.QPushButton("Choose Folder...")
-        folder_button.clicked.connect(self.choose_folder)
+        browse_button = QtWidgets.QPushButton("Browse for File...")
+        browse_button.clicked.connect(self.browse_for_file)
         self.show_folder(self.cal_dir, current)
 
         buttons = QtWidgets.QDialogButtonBox(
@@ -81,7 +82,7 @@ class CalibrationFileChooser(QtWidgets.QDialog):
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(self.folder_label)
         layout.addWidget(self.table)
-        layout.addWidget(folder_button)
+        layout.addWidget(browse_button)
         layout.addWidget(buttons)
 
     def show_folder(self, cal_dir: Path, current: Path | None = None):
@@ -97,12 +98,25 @@ class CalibrationFileChooser(QtWidgets.QDialog):
         self.table.clearSelection()
         self.select_file(current)
 
-    def choose_folder(self):
-        folder = QtWidgets.QFileDialog.getExistingDirectory(
-            self, "Calibration Folder", str(self.cal_dir)
+    def browse_start_folder(self) -> Path:
+        """The folder of the current file, unless that is inside the macOS app."""
+        return Path.home() if ".app/" in str(self.cal_dir.resolve()) else self.cal_dir
+
+    def browse_for_file(self):
+        """Choose a calibration file in any folder. Choosing a file closes the dialog."""
+        filename, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Calibration File", str(self.browse_start_folder()), BROWSE_FILTER
         )
-        if folder:
-            self.show_folder(Path(folder))
+        if not filename:
+            return
+        path = Path(filename)
+        if not path.match(FILE_PATTERN):
+            QtWidgets.QMessageBox.warning(
+                self, "Calibration", f"Not a speaker calibration file: {path.name:s}"
+            )
+            return
+        self.show_folder(path.parent, path)
+        self.accept()
 
     def select_file(self, target: Path | None):
         for row, (path, _) in enumerate(self.files):

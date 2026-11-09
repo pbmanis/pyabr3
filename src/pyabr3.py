@@ -350,10 +350,15 @@ class PyABR(QtCore.QObject):
         )
         if chosen is None:
             return
+        try:
+            caldata = read_calibration.get_calibration_data(chosen)
+            self.calibration_display.show_calibration(chosen, caldata)
+        except Exception as e:  # older or damaged files fail in many different ways
+            MBox.MessageBox(f"Could not read {chosen.name:s}: {e!s}", title="Calibration")
+            return
         self.calfile = chosen
-        self.caldata = read_calibration.get_calibration_data(chosen)
+        self.caldata = caldata
         self.WG.caldata = self.caldata
-        self.calibration_display.show_calibration(self.calfile, self.caldata)
         self.Dock_Calibration.raiseDock()
 
     def open_calibration(self):

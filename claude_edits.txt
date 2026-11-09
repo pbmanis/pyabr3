@@ -1,0 +1,146 @@
+pyabr3: record of the Claude Code session of 2026-11-09
+=======================================================
+
+Goal: port the MATLAB calibration program (ABR4 calibrations.m, no-globals branch) to
+Python with its own GUI and mock-hardware tests, hook it into pyabr3, then add packaging
+and viewers for calibration and ABR data.
+
+STATUS
+------
+- 119 tests pass, on mock hardware and generated or stored data.
+- The macOS app builds and opens its windows (tested without a display).
+- NOT yet done: nothing has run on the rig, the Windows build has not been run, and the
+  calibration output has not been compared with MATLAB on the same recordings.
+
+
+FILES ADDED
+-----------
+src/calibration/
+  calc.py             Calculations ported from soundfuncs.m, tonepip.m, cosinor.m
+  engine.py           Speaker, microphone and noise floor procedures; writes .cal files
+  hardware.py         Interface, PyStim (NI/RP2.1/PA5) adapter, mock hardware
+  calibration_gui.py  Calibration window (parametertree, PyQtGraph)
+  cal_chooser.py      Dialog for choosing a calibration file
+  cal_display.py      Calibration tab: raw calibration and 75 dB check
+src/viewer/
+  abr_files.py        Reads .p, .pkl and MATLAB text data; calculates averages
+  data_viewer.py      Data viewer window
+tests/test_calibration.py, tests/test_viewer.py
+icons/                make_icons.py, pyabr3.png, pyabr3.ico, pyabr3.icns
+build_macos.sh, build_windows.sh
+claude_edits.txt      This file
+
+Generated when building (not source): dist/macos/, build/macos/, PyABR3.spec
+
+
+FILES CHANGED
+-------------
+src/pyabr3.py
+  - Calibrate button opens the calibration window (simulated hardware if there is no RP2.1).
+  - Calibration tab added beside Recording and Preview.
+  - Read Cal File opens the chooser; the chosen file is used for stimuli and saved data.
+    A file that cannot be read gives a message and the current calibration is kept.
+  - Load Data File opens the data viewer.
+  - Save Visible removed.
+  - With the test configuration, falls back to calfiles/frequency_MF1.cal if the rig's
+    file is absent.
+src/build_parametertree.py   Calibrate button added, Save Visible removed.
+src/wave_generator.py        Removed "return self" from __init__ (see Bugs).
+src/__init__.py              __version__ = "0.4.1" (now the only place the version is set).
+main.py                      Replaced the placeholder with the program entry point.
+pyproject.toml               See UV below.
+uv.lock                      Regenerated.
+
+Not modified: config/, calfiles/, nidaq/, protocols/. No git commands were run by Claude
+and no files were deleted.
+
+
+BUGS FIXED
+----------
+- WaveGenerator.__init__ returned a value, so pyabr3 could not start (TypeError).
+- command_dispatcher was connected twice (__init__ and buildGUI), so each button press
+  ran its action twice, including acquire. It is now connected once.
+  CHECK ON THE RIG: Start Acquisition now calls acquire once per press.
+- Read Cal File updated self.caldata but not the wave generator.
+- Load Data File read only .pkl files and displayed nothing (update_plots is empty).
+
+
+CALIBRATION PROGRAM
+-------------------
+Ported from the no-globals branch (0.5 s tones, 0.75 s records, 25-75% measurement window,
+40 and 20 kHz notch filters, 1/5 octave bands, steepness 0.9, maxdB from the bandpass level,
+noise floor mode). The GUI prompts for the manual settings before each run.
+
+Output files, in the folder of "calfile" in the configuration:
+  frequency_<speaker>.cal, microphone_<mic>.cal, chk75db_<speaker>.cal
+  calibration_history/<name>_<dd-Mon-yyyy_HH-MM-SS>.cal
+  Noise_Measure_<yyyy.mm.dd_HH.MM.SS>.csv
+Differences from MATLAB: history names include the time, so a second calibration on the
+same day does not replace the first, and DateTime is stored as text.
+
+Added safeguards: a speaker run is refused if the preamp gain differs from the microphone
+calibration file; a warning is logged for frequencies inside a notch filter.
+
+Checked against stored MATLAB files: the SPL and microphone sensitivity formulas reproduce
+the saved values to within 1e-9, and the file fields match in name and order.
+
+
+VIEWERS
+-------
+Calibration tab: raw calibration (max SPL, cosinor, bandpass) and the 75 dB check, both with
+the noise floor. The check shown is the first one made after the calibration on the same
+day. Times come from the MAT-file header, not the file system, because file system times
+change when files are moved. Of the 24 calibrations in abr_data/calibration_history, 21
+find a check. Two have a check made just before the calibration; by decision these are not
+shown.
+
+Data viewer:
+  .p    Opening one trial loads the whole recording. Stacked averages by level, single
+        trial view, and Display radio buttons: Average only, Average with SD, Average with
+        individual traces (at most 100 drawn per level; the SD uses all trials).
+        Averages match analyze_abr on real click, tone and interleaved data (1e-15 uV).
+  .pkl  Threshold summaries (all_tone_map_data.pkl), or any numeric arrays.
+  .txt  MATLAB runs. Any file of a run loads it, with a list of the runs in that folder.
+        Matches ABRPlotting ABR_Reader.read_dataset on real runs (3e-6 uV).
+This viewer is for on-line inspection. Full analysis is done with other code.
+
+
+UV AND PACKAGING
+----------------
+pyproject.toml: Python pinned to 3.13; version read from src/__init__.py; tdtpy (Windows
+only) and lmfit added; nose removed; pylibrary URL corrected; "build" dependency group with
+PyInstaller; pytest options set so that "uv run pytest" works.
+Updating the local environment: uv sync --group build
+Run: python main.py   Calibration only: python -m src.calibration.calibration_gui [--mock]
+Data viewer only: python -m src.viewer.data_viewer [file]
+Build: ./build_macos.sh, or ./build_windows.sh in Git Bash on Windows.
+Icons: "PyABR3" in white on Carolina Blue (#4B9CD3) with a black ABR waveform behind it.
+
+
+DECISIONS
+---------
+- 104 dB calibrator: fix after MATLAB validation (see Open Items).
+- All speakers kept. MF1-family speakers use 20 dB attenuation, as in no-globals abr4.m.
+- Calibrations are not reloaded automatically; use Read Cal File.
+- MATLAB-era recordings: the text files are the data of record. Assume 100 kHz for recent
+  data (it may have been 50 kHz several years ago).
+- Calibration files in the older formats (11 files in abr_data/calibrations_pre-2018918)
+  give a "could not read" message.
+
+
+OPEN ITEMS
+----------
+1. Compare with MATLAB on the rig. The bandpass filter is the one calculation that could
+   not be transcribed exactly (rebuilt from MATLAB's documented behaviour), and the noise
+   floor is the value most likely to differ.
+2. After that, fix compute_spl: levels read 10 dB high after a 104 dB microphone
+   calibration. All 48 stored microphone files used 94 dB, so existing data is unaffected.
+   test_104_db_calibrator_offset_is_preserved_from_matlab must be updated with the fix.
+3. Test on the rig: the RP2.1 calls (only tested against fakes), and running them from a
+   worker thread.
+4. Run and test the Windows build. Saved data goes to abr_data/ beside the program, because
+   pyabr3 ignores "datapath" when writing. abrs_v2.rcx is hard coded to
+   c:\users\experimenters\desktop\pyabr\tdt.
+5. ABRPlotting/ABR_Datasets.py sets 50 kHz for the Reggie datasets, which include 2023 and
+   2024 recordings. Those should be 100 kHz under the assumption above.
+6. pyabr3.egg-info in the repository still says version 0.1.0 and can be removed by hand.

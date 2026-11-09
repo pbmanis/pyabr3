@@ -637,7 +637,13 @@ def test_chooser_defaults_to_newest_when_current_is_not_listed(qapp, tmp_path):
     assert dialog.selected_path() == files[2]
 
 
-def test_chooser_can_switch_to_another_folder(qapp, tmp_path, monkeypatch):
+def browse_returns(monkeypatch, path):
+    monkeypatch.setattr(
+        cal_chooser.QtWidgets.QFileDialog, "getOpenFileName", lambda *a, **k: (str(path), "")
+    )
+
+
+def test_browse_chooses_a_file_in_another_folder_and_closes(qapp, tmp_path, monkeypatch):
     first = tmp_path / "a"
     other = tmp_path / "b"
     first.mkdir()
@@ -646,12 +652,43 @@ def test_chooser_can_switch_to_another_folder(qapp, tmp_path, monkeypatch):
     write_header(other / "frequency_B.cal", "Fri Jan  2 09:00:00 2026")
     write_header(other / "frequency_C.cal", "Sat Jan  3 09:00:00 2026")
     dialog = cal_chooser.CalibrationFileChooser(first)
+    browse_returns(monkeypatch, other / "frequency_B.cal")  # not the newest in that folder
+    dialog.browse_for_file()
+    assert dialog.result() == cal_chooser.QtWidgets.QDialog.DialogCode.Accepted
+    assert dialog.selected_path() == other / "frequency_B.cal"
+
+
+def test_browse_cancelled_keeps_the_dialog_open(qapp, tmp_path, monkeypatch):
+    write_header(tmp_path / "frequency_A.cal", "Thu Jan  1 09:00:00 2026")
+    dialog = cal_chooser.CalibrationFileChooser(tmp_path)
     monkeypatch.setattr(
-        cal_chooser.QtWidgets.QFileDialog, "getExistingDirectory", lambda *a, **k: str(other)
+        cal_chooser.QtWidgets.QFileDialog, "getOpenFileName", lambda *a, **k: ("", "")
     )
-    dialog.choose_folder()
-    assert dialog.table.rowCount() == 2
-    assert dialog.selected_path() == other / "frequency_C.cal"
+    dialog.browse_for_file()
+    assert dialog.result() != cal_chooser.QtWidgets.QDialog.DialogCode.Accepted
+    assert dialog.selected_path() == tmp_path / "frequency_A.cal"
+
+
+def test_browse_rejects_files_that_are_not_speaker_calibrations(qapp, tmp_path, monkeypatch):
+    write_header(tmp_path / "frequency_A.cal", "Thu Jan  1 09:00:00 2026")
+    dialog = cal_chooser.CalibrationFileChooser(tmp_path)
+    warnings = []
+    monkeypatch.setattr(
+        cal_chooser.QtWidgets.QMessageBox, "warning", lambda *a, **k: warnings.append(a)
+    )
+    browse_returns(monkeypatch, tmp_path / "microphone_x.cal")
+    dialog.browse_for_file()
+    assert len(warnings) == 1
+    assert dialog.result() != cal_chooser.QtWidgets.QDialog.DialogCode.Accepted
+
+
+def test_browse_does_not_start_inside_the_macos_app(qapp, tmp_path):
+    inside = tmp_path / "PyABR3.app" / "Contents" / "calfiles"
+    inside.mkdir(parents=True)
+    dialog = cal_chooser.CalibrationFileChooser(inside)
+    assert dialog.browse_start_folder() == Path.home()
+    outside = cal_chooser.CalibrationFileChooser(tmp_path)
+    assert outside.browse_start_folder() == tmp_path
 
 
 # ---- calibration display
@@ -847,6 +884,22 @@ def test_pyabr3_uses_the_chosen_calibration_for_stimuli(tmp_path, monkeypatch):
     assert stub.raised == [1]
     assert stub.caldata["spkr"] == "MF1"
     assert stub.WG.caldata is stub.caldata
+
+
+def test_pyabr3_keeps_its_calibration_when_the_chosen_file_cannot_be_read(tmp_path, monkeypatch):
+    from src import pyabr3
+
+    bad = tmp_path / "frequency_old.cal"
+    bad.write_bytes(b"not a calibration")
+    monkeypatch.setattr(pyabr3.cal_chooser, "choose_calibration_file", lambda *a, **k: bad)
+    messages = []
+    monkeypatch.setattr(pyabr3.MBox, "MessageBox", lambda *a, **k: messages.append(a))
+    stub = cal_stub(tmp_path)
+    original = stub.calfile
+    pyabr3.PyABR.load_cal_file(stub)
+    assert len(messages) == 1
+    assert stub.calfile == original and stub.caldata == "old" and stub.WG.caldata == "old"
+    assert stub.raised == []
 
 
 def test_pyabr3_keeps_its_calibration_when_chooser_is_cancelled(tmp_path, monkeypatch):

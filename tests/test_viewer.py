@@ -316,8 +316,286 @@ def test_corrupt_file_is_reported(viewer, qapp, tmp_path):
 
 
 def test_unsupported_file_type_is_reported(viewer, tmp_path):
-    viewer.open_path(tmp_path / "data.txt")
+    viewer.open_path(tmp_path / "data.xyz")
     assert "cannot be opened" in viewer.errors[0]
+
+
+# ---- average with SD or single traces
+
+
+def set_display(viewer, view):
+    viewer.ptreedata.child("Average", "Display").setValue(view)
+
+
+def wait_for_traces(viewer, qapp, timeout=30.0):
+    deadline = time.time() + timeout
+    while viewer.is_calculating() and time.time() < deadline:
+        qapp.processEvents()
+        time.sleep(0.01)
+    assert not viewer.is_calculating()
+    qapp.processEvents()
+    assert viewer.errors == []
+
+
+def test_mean_of_single_trial_responses_equals_the_average(click_dir):
+    data = abr_files.load_run(first_file(click_dir))
+    average = abr_files.compute_responses(data, HPF, LPF)
+    trials = abr_files.compute_trial_responses(data, HPF, LPF)
+    assert trials[(90.0, 0.0)].shape == (3, len(average.t_ms))
+    np.testing.assert_allclose(
+        np.mean(trials[(90.0, 0.0)], axis=0), average.traces[(90.0, 0.0)], atol=1e-3
+    )
+
+
+def test_trial_responses_use_only_the_selected_interleaved_set(interleaved_dir):
+    data = abr_files.load_run(first_file(interleaved_dir))
+    trials = abr_files.compute_trial_responses(data, None, None, interleaved_set=1)
+    average = abr_files.compute_responses(data, None, None, interleaved_set=1)
+    assert trials[(10.0, 1000.0)].shape[0] == 3
+    assert len(trials) == 4
+    np.testing.assert_allclose(
+        np.mean(trials[(10.0, 1000.0)], axis=0), average.traces[(10.0, 1000.0)], atol=1e-3
+    )
+
+
+def test_trial_calculation_can_be_stopped(click_dir):
+    data = abr_files.load_run(first_file(click_dir))
+    assert abr_files.compute_trial_responses(data, should_stop=lambda: True) is None
+
+
+def test_trial_sd_uses_n_minus_one_and_handles_one_trial():
+    trials = np.array([[1.0, 2.0], [3.0, 6.0]])
+    np.testing.assert_allclose(abr_files.trial_sd(trials), [np.sqrt(2.0), 2.0 * np.sqrt(2.0)])
+    assert abr_files.trial_sd(trials[:1]).tolist() == [0.0, 0.0]
+
+
+def test_display_is_a_set_of_radio_buttons_defaulting_to_average(viewer):
+    display = viewer.ptreedata.child("Average", "Display")
+    assert display.opts["exclusive"] and display.value() == data_viewer.VIEW_AVERAGE
+    assert [c.name() for c in display.children()] == [
+        data_viewer.VIEW_AVERAGE, data_viewer.VIEW_SD, data_viewer.VIEW_TRACES
+    ]  # fmt: skip
+
+
+def test_sd_view_shades_each_level(viewer, qapp, click_dir):
+    open_and_wait(viewer, qapp, first_file(click_dir))
+    set_display(viewer, data_viewer.VIEW_SD)
+    assert "calculating" in viewer.panels["average"].titleLabel.text
+    wait_for_traces(viewer, qapp)
+    panel = viewer.panels["average"]
+    fills = [i for i in panel.items if isinstance(i, pg.FillBetweenItem)]
+    assert len(fills) == 2
+    assert len(panel.listDataItems()) == 6  # upper, lower and mean at two levels
+    assert "3 trials" in panel.titleLabel.text
+
+
+def test_single_trace_view_draws_faint_traces_behind_the_mean(viewer, qapp, click_dir):
+    open_and_wait(viewer, qapp, first_file(click_dir))
+    set_display(viewer, data_viewer.VIEW_TRACES)
+    wait_for_traces(viewer, qapp)
+    items = viewer.panels["average"].listDataItems()
+    assert len(items) == 4  # traces then mean, for two levels
+    assert items[0].opts["pen"].color().alpha() == data_viewer.SINGLE_TRACE_ALPHA
+    assert items[1].opts["pen"].width() == data_viewer.MEAN_LINE_WIDTH
+
+
+def test_returning_to_average_shows_only_the_mean(viewer, qapp, click_dir):
+    open_and_wait(viewer, qapp, first_file(click_dir))
+    set_display(viewer, data_viewer.VIEW_SD)
+    wait_for_traces(viewer, qapp)
+    set_display(viewer, data_viewer.VIEW_AVERAGE)
+    assert len(viewer.panels["average"].listDataItems()) == 2
+
+
+def test_changing_the_filter_recalculates_the_single_traces(viewer, qapp, click_dir):
+    open_and_wait(viewer, qapp, first_file(click_dir))
+    set_display(viewer, data_viewer.VIEW_SD)
+    wait_for_traces(viewer, qapp)
+    before = viewer.trial_responses[(90.0, 0.0)].copy()
+    viewer.ptreedata.child("Average", "Low pass (Hz, 0 = off)").setValue(1000.0)
+    wait_for_traces(viewer, qapp)
+    assert viewer.trial_request[2] == 1000.0
+    assert not np.allclose(before, viewer.trial_responses[(90.0, 0.0)])
+
+
+def test_many_trials_are_limited_when_drawn_and_said_so(viewer):
+    trials = np.zeros((512, 10))
+    assert viewer.shown_trials(trials).shape == (data_viewer.MAX_SINGLE_TRACES, 10)
+    assert viewer.shown_trials(np.zeros((20, 10))).shape == (20, 10)
+
+
+def test_matlab_run_says_single_traces_are_not_available(viewer, matlab_dir):
+    set_display(viewer, data_viewer.VIEW_SD)
+    viewer.open_path(matlab_dir / f"{RUN:s}-p.txt")
+    panel = viewer.panels["average"]
+    assert "not stored" in panel.titleLabel.text
+    assert len(panel.listDataItems()) == 3
+    assert viewer.calculator is None
+
+
+# ---- MATLAB text files
+
+RUN = "20170419-0849"
+TONE_RUN = "20170419-0901"
+MATLAB_LEVELS = [20.0, 40.0, 60.0]
+FS_MATLAB = 100000.0
+N_MATLAB = 2500
+
+
+def matlab_trace(amplitude):
+    t = np.arange(N_MATLAB) / FS_MATLAB
+    return amplitude * 1e-6 * np.sin(2 * np.pi * 1000.0 * t)
+
+
+def write_columns(path, columns, ending="\r\n"):
+    rows = np.column_stack(columns)
+    lines = ["\t".join(f"  {v:.7e}" for v in row) + "\t" for row in rows]
+    path.write_bytes((ending.join(lines) + ending).encode("ascii"))
+
+
+def write_numbers(path, numbers):
+    path.write_bytes("".join(f"  {v:.7e}\t\r\n" for v in numbers).encode("ascii"))
+
+
+@pytest.fixture
+def matlab_dir(tmp_path):
+    """A click run, whose columns run from high to low level, and a tone run."""
+    write_numbers(tmp_path / f"{RUN:s}-SPL.txt", MATLAB_LEVELS)
+    high_to_low = [matlab_trace(a) for a in [3.0, 2.0, 1.0]]
+    write_columns(tmp_path / f"{RUN:s}-p.txt", high_to_low)
+    write_columns(tmp_path / f"{RUN:s}-n.txt", [2.0 * c for c in high_to_low], ending="\r")
+
+    write_numbers(tmp_path / f"{TONE_RUN:s}-SPL.txt", MATLAB_LEVELS)
+    write_numbers(tmp_path / f"{TONE_RUN:s}-kHz.txt", [8000.0, 48000.0])
+    low_to_high = [matlab_trace(a) for a in [1.0, 2.0, 3.0]]
+    write_columns(tmp_path / f"{TONE_RUN:s}-p-8000.000.txt", low_to_high)
+    write_columns(tmp_path / f"{TONE_RUN:s}-n-8000.000.txt", low_to_high)
+    not_reached = low_to_high[:2] + [np.full(N_MATLAB, np.nan)]
+    write_columns(tmp_path / f"{TONE_RUN:s}-p-48000.000.txt", not_reached)
+    write_columns(tmp_path / f"{TONE_RUN:s}-n-48000.000.txt", not_reached)
+    return tmp_path
+
+
+def test_matlab_run_name_comes_from_any_file_of_the_run():
+    assert abr_files.matlab_run_name(Path(f"{RUN:s}-p.txt")) == RUN
+    assert abr_files.matlab_run_name(Path(f"{TONE_RUN:s}-n-5600.000.txt")) == TONE_RUN
+    with pytest.raises(ValueError):
+        abr_files.matlab_run_name(Path("notes.txt"))
+
+
+def test_matlab_runs_in_a_folder_are_listed_by_type(matlab_dir):
+    assert abr_files.list_matlab_runs(matlab_dir) == {RUN: "click", TONE_RUN: "tone"}
+
+
+def test_click_columns_are_reversed_and_polarities_averaged(matlab_dir):
+    run = abr_files.read_matlab_run(matlab_dir, RUN)
+    assert run.stim == "click" and run.levels == MATLAB_LEVELS
+    responses = abr_files.compute_matlab_responses(run)
+    # (p + n) / 2 = 1.5 * the amplitude in the p file; 20 dB is the last column
+    np.testing.assert_allclose(responses.traces[(20.0, 0.0)], 1.5 * matlab_trace(1.0) * 1e6, atol=1e-5)
+    np.testing.assert_allclose(responses.traces[(60.0, 0.0)], 1.5 * matlab_trace(3.0) * 1e6, atol=1e-5)
+
+
+def test_tone_columns_keep_the_order_of_the_levels(matlab_dir):
+    responses = abr_files.compute_matlab_responses(abr_files.read_matlab_run(matlab_dir, TONE_RUN))
+    np.testing.assert_allclose(responses.traces[(60.0, 8000.0)], matlab_trace(3.0) * 1e6, atol=1e-5)
+    assert responses.frequencies == [8000.0, 48000.0]
+
+
+def test_level_that_was_not_recorded_is_left_out(matlab_dir):
+    responses = abr_files.compute_matlab_responses(abr_files.read_matlab_run(matlab_dir, TONE_RUN))
+    assert responses.levels(48000.0) == [20.0, 40.0]
+    assert responses.levels(8000.0) == MATLAB_LEVELS
+
+
+def test_matlab_time_base_at_100_khz_is_25_ms(matlab_dir):
+    responses = abr_files.compute_matlab_responses(abr_files.read_matlab_run(matlab_dir, RUN))
+    assert len(responses.t_ms) == N_MATLAB
+    assert responses.t_ms[1] == pytest.approx(0.01)
+
+
+def test_matlab_time_base_is_limited_to_25_ms_at_a_lower_rate(matlab_dir):
+    responses = abr_files.compute_matlab_responses(abr_files.read_matlab_run(matlab_dir, RUN), 50000.0)
+    assert len(responses.t_ms) == 1250
+    assert responses.t_ms[-1] < 25.0
+
+
+def test_matlab_filter_matches_abrfuncs_filter(matlab_dir):
+    run = abr_files.read_matlab_run(matlab_dir, RUN)
+    responses = abr_files.compute_matlab_responses(run, hpf=500.0, lpf=2500.0)
+    trace = run.waves[0.0][:, 0]
+    nyq = FS_MATLAB / 2.0
+    b, a = abr_files.scipy.signal.iirfilter(4, (500.0 / nyq, 2500.0 / nyq), btype="band", ftype="butter")
+    expected = abr_files.scipy.signal.filtfilt(b, a, trace, padlen=int(len(trace) / 10))
+    np.testing.assert_allclose(responses.traces[(20.0, 0.0)], expected * 1e6, atol=1e-9)
+
+
+def test_missing_point_at_the_end_of_a_trace_is_filled(tmp_path):
+    write_numbers(tmp_path / f"{RUN:s}-SPL.txt", [20.0])
+    trace = matlab_trace(1.0)
+    trace[-1] = np.nan
+    write_columns(tmp_path / f"{RUN:s}-p.txt", [trace])
+    write_columns(tmp_path / f"{RUN:s}-n.txt", [trace])
+    responses = abr_files.compute_matlab_responses(
+        abr_files.read_matlab_run(tmp_path, RUN), hpf=500.0, lpf=2500.0
+    )
+    assert np.isfinite(responses.traces[(20.0, 0.0)]).all()
+
+
+def test_run_with_a_missing_polarity_is_reported(matlab_dir):
+    (matlab_dir / f"{RUN:s}-n.txt").rename(matlab_dir / "moved.dat")
+    with pytest.raises(ValueError, match="No complete pair"):
+        abr_files.read_matlab_run(matlab_dir, RUN)
+
+
+def test_window_opens_matlab_click_run_from_any_of_its_files(viewer, matlab_dir):
+    viewer.open_path(matlab_dir / f"{RUN:s}-n.txt")
+    assert viewer.errors == []
+    assert viewer.value("File", "Status") == "MATLAB click run, 1 frequencies"
+    assert viewer.value("Average", "Frequency") == "Click"
+    assert viewer.value("Average", "High pass (Hz, 0 = off)") == 500.0
+    assert viewer.value("Average", "Low pass (Hz, 0 = off)") == 2500.0
+    assert len(viewer.panels["average"].listDataItems()) == 3
+
+
+def test_window_switches_between_runs_in_the_folder(viewer, matlab_dir):
+    viewer.open_path(matlab_dir / f"{RUN:s}-SPL.txt")
+    viewer.ptreedata.child("MATLAB run", "Run").setValue(f"{TONE_RUN:s} (tone)")
+    assert viewer.errors == []
+    assert viewer.value("File", "Name") == TONE_RUN
+    assert viewer.value("Average", "Frequency") == "8000 Hz"
+    viewer.ptreedata.child("Average", "Frequency").setValue("48000 Hz")
+    assert len(viewer.panels["average"].listDataItems()) == 2
+
+
+def test_sample_rate_setting_changes_the_time_axis(viewer, matlab_dir):
+    viewer.open_path(matlab_dir / f"{RUN:s}-p.txt")
+    assert viewer.responses.t_ms[1] == pytest.approx(0.01)
+    viewer.ptreedata.child("MATLAB run", "Sample rate (Hz)").setValue(50000.0)
+    assert viewer.responses.t_ms[1] == pytest.approx(0.02)
+
+
+def test_invert_flips_the_plotted_traces(viewer, matlab_dir):
+    viewer.open_path(matlab_dir / f"{RUN:s}-p.txt")
+    before = viewer.panels["average"].listDataItems()[0].yData.copy()
+    viewer.ptreedata.child("Average", "Invert").setValue(True)
+    after = viewer.panels["average"].listDataItems()[0].yData
+    np.testing.assert_allclose(after, -before, atol=1e-9)
+
+
+def test_filter_settings_change_only_when_the_format_changes(viewer, qapp, matlab_dir, click_dir):
+    viewer.open_path(matlab_dir / f"{RUN:s}-p.txt")
+    viewer.ptreedata.child("Average", "High pass (Hz, 0 = off)").setValue(700.0)
+    viewer.open_path(matlab_dir / f"{TONE_RUN:s}-SPL.txt")
+    assert viewer.value("Average", "High pass (Hz, 0 = off)") == 700.0
+    open_and_wait(viewer, qapp, first_file(click_dir))
+    assert viewer.value("Average", "High pass (Hz, 0 = off)") == 300.0
+    assert viewer.matlab_run is None
+
+
+def test_text_file_that_is_not_from_matlab_is_reported(viewer, tmp_path):
+    viewer.open_path(tmp_path / "notes.txt")
+    assert "Not the name" in viewer.errors[0]
 
 
 # ---- pyabr3 button
