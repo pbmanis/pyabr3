@@ -30,7 +30,6 @@ class WaveGenerator:
         self.caldata = caldata
         self.multi_attn_flatten_spectra = False  # try to flatten using
             # mutiple attenaution levels and less DAC dynamic range
-        return self
 
     def setup(self, protocol: Union[str, Path], frequency: float = 500000.0,
               config:Union[dict, None]=None):

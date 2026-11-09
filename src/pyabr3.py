@@ -26,7 +26,7 @@ from pyqtgraph import reload as reload
 from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
 from pyqtgraph.Qt.QtCore import QObject, pyqtSignal, pyqtSlot
 
-from src import convert_nested_ordered_dict as convert_nested_ordered_dict
+from src import convert_nested_ordered_dict
 from src import presenter_thread as presenter_thread
 from src import protocol_reader as protocol_reader
 from src import pystim3 as pystim3
@@ -36,6 +36,9 @@ from src.build_parametertree import build_parametertree
 import src.read_calibration as read_calibration
 import src.read_abr as read_abr
 import src.message_box as MBox
+from src.calibration import cal_chooser, cal_display, calibration_gui
+from src.calibration.hardware import MockCalibrationHardware, PyStimCalibrationHardware
+from src.viewer import data_viewer
 
 MAX_CLICK = 105.1  # SPL for maximum click
 
@@ -66,10 +69,15 @@ class PyABR(QtCore.QObject):
         # check hardware
         self.hardware, self.sfin, self.sfout = self.PS.getHardware()
         self.calfile = Path(self.config["calfile"])  # get calibration file
+        if configtype == "test" and not self.calfile.is_file():
+            # the configured path is on the rig: use the copy in the repository or app
+            self.calfile = Path("calfiles", "frequency_MF1.cal")
         self.caldata = read_calibration.get_calibration_data(self.calfile)
         now = datetime.datetime.now()
         self.WG = wave_generator.WaveGenerator(caldata=self.caldata)
         self.Presenter = None  # the thread object that will be used for presenting stimuli
+        self.cal_window = None  # the calibration window, when it has been opened
+        self.data_viewer = None  # the data viewer window, when it has been opened
         self.wave_matrix: dict = {}
         self.ptreedata = None  # pyqtgraph parametertree  - set to None until the tree is built
         self.protocol = None
@@ -164,6 +172,8 @@ class PyABR(QtCore.QObject):
         self.dockArea.addDock(self.Dock_Params, "left")
         self.dockArea.addDock(self.Dock_Recording, "right", self.Dock_Params)
         self.dockArea.addDock(self.Dock_Preview, "below", self.Dock_Recording)
+        self.Dock_Calibration = PGD.Dock("Calibration", size=(right_docks_width, 1024))
+        self.dockArea.addDock(self.Dock_Calibration, "below", self.Dock_Preview)
         self.win.setWindowTitle("ABR Acquistion")
         self.win.setGeometry(100, 100, 1200, 1000)
         # print(dir(self.dockArea))
@@ -174,7 +184,9 @@ class PyABR(QtCore.QObject):
         self.Dock_Params.addWidget(self.ptree)
 
         self.build_recording_graphs()
-        self.ptreedata.sigTreeStateChanged.connect(self.command_dispatcher)
+        self.calibration_display = cal_display.CalibrationDisplay()
+        self.Dock_Calibration.addWidget(self.calibration_display)
+        self.calibration_display.show_calibration(self.calfile, self.caldata)
         self.win.show()
 
     def build_recording_graphs(self):
@@ -233,6 +245,9 @@ class PyABR(QtCore.QObject):
         This function is called when the parametertree is changed, including
         when the user clicks on a button or changes a value.
 
+        Bug: this was connected in both __init__ and buildGUI, so each button press
+        ran its action twice (including acquire). It is now connected only in __init__.
+
         Parameters
         ----------
         param : parametertree parameter
@@ -264,12 +279,12 @@ class PyABR(QtCore.QObject):
                             self.pause()
                         case "Resume":
                             self.continue_trials()
-                        case "Save Visible":
-                            self.save_visible()
                         case "Load Data File":
                             self.load_file()
                         case "Read Cal File":
                             self.load_cal_file()
+                        case "Calibrate":
+                            self.open_calibration()
 
                 case "Status":
                     match path[1]:
@@ -305,51 +320,59 @@ class PyABR(QtCore.QObject):
         self.ptreedata.child("Parameters").setValue(self.protocol)
         print("new file: ", self.protocol["filename"])
 
-    def save_visible(self):
-        """
-        Save the visible data to a file
-        """
-        print("Save Visible data set")
-        self.new_filename()
-        self.ptreedata.child("Parameters").setValue(self.protocol)
-        with open(self.protocol["filename"] + ".pkl", "wb") as fh:
-            pickle.dump(
-                {
-                    "abr": self.abr,
-                    "abr_avg": self.abr_avg,
-                    "waveform": self.stimulus_waveform,
-                    "AI": self.AI,
-                    "map": self.map,
-                },
-                fh,
-            )
+    def show_data_viewer(self):
+        if self.data_viewer is None:
+            self.data_viewer = data_viewer.DataViewer()
+        self.data_viewer.show()
+        self.data_viewer.raise_()
+        return self.data_viewer
 
     def load_file(self):
         """
-        Load a file
+        Open a data file in the data viewer.
+
+        Bug: this only read .pkl files, not the .p files that acquisition writes, and
+        update_plots is empty, so nothing was shown. Related: src/viewer/
         """
-        print("Load File")
-        filename = QtWidgets.QFileDialog.getOpenFileName(
-            None, "Open File", ".", "Pickle Files (*.pkl)"
-        )
-        if filename[0]:
-            with open(filename[0], "rb") as fh:
-                data = pickle.load(fh)
-                self.abr = data["abr"]
-                self.abr_avg = data["abr_avg"]
-                self.stimulus_wavedata = data["waveform"]
-                self.AI = data["AI"]
-                self.map = data["map"]
-                self.update_plots()
+        self.show_data_viewer().open_file_dialog()
 
 
     def load_cal_file(self):
         """
-        Load a calibration file
+        Choose a calibration file, and use it for stimuli and saved data.
+
+        Bug: this reloaded the configured file and updated self.caldata only, so the
+        wave generator kept the calibration read at startup. It now updates both.
+        Related: src/calibration/cal_chooser.py
         """
-        calfile = self.config["calfile"]
-        self.caldata = read_calibration.get_calibration_data(calfile)
-        read_calibration.plot_calibration(self.caldata)
+        chosen = cal_chooser.choose_calibration_file(
+            self.calfile.parent, current=self.calfile, parent=self.win
+        )
+        if chosen is None:
+            return
+        self.calfile = chosen
+        self.caldata = read_calibration.get_calibration_data(chosen)
+        self.WG.caldata = self.caldata
+        self.calibration_display.show_calibration(self.calfile, self.caldata)
+        self.Dock_Calibration.raiseDock()
+
+    def open_calibration(self):
+        """
+        Open the calibration window. Without the RP2.1 (for example, with the
+        test configuration) the window uses simulated hardware, and says so in its title.
+        """
+        if self.cal_window is not None and self.cal_window.isVisible():
+            self.cal_window.raise_()
+            return
+        if self.TrialTimer.isActive():
+            MBox.MessageBox("Stop the acquisition before calibrating.", title="Calibration")
+            return
+        if "RP21" in self.hardware:
+            hardware = PyStimCalibrationHardware(self.config, pystim=self.PS)
+        else:
+            hardware = MockCalibrationHardware()
+        self.cal_window = calibration_gui.CalibrationWindow(hardware, self.config, embedded=True)
+        self.cal_window.show()
 
     def plot_stimulus_wave(self, n: int = 0): # , n_sample_delay:int=65):
         first_sound = self.wave_matrix[list(self.wave_matrix.keys())[n]]
