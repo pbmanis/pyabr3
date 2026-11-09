@@ -27,6 +27,7 @@ LEGEND_OFFSET = (-10, 10)
 LEGEND_BRUSH = (0, 0, 0, 190)
 LEGEND_TEXT = "#E0E0E0"
 CHECK_FIELDS = {"Freqs", "dBSPL_bp", "dBSPL_nf"}
+LEGEND_HEADROOM = 1.35  # keeps the legend above the curves
 
 
 def plot_noise_floor(panel, freqs: np.ndarray, noise: np.ndarray):
@@ -115,6 +116,7 @@ class CalibrationDisplay(pg.GraphicsLayoutWidget):
         ]:
             panel.plot(freqs, np.asarray(caldata[key], dtype=float)[order], pen=pg.mkPen(color), name=name)
         panel.setXRange(np.log10(freqs[0]), np.log10(freqs[-1]))
+        panel.setYRange(0.0, LEGEND_HEADROOM * np.max(caldata["maxdb"]), padding=0)
         panel.setTitle(
             f"Raw calibration: {caldata['spkr']!s}, attn {float(caldata['calattn']):.0f} dB, "
             f"{caldata['date']!s} ({cal_path.name:s})"
@@ -124,7 +126,7 @@ class CalibrationDisplay(pg.GraphicsLayoutWidget):
         panel = self.check_panel
         panel.clear()
         if found is None:
-            panel.setTitle("75 dB check: no check was made on the day of this calibration")
+            panel.setTitle("75 dB check: no check was made later on the day of this calibration")
             return
         path, check, made = found
         freqs = np.atleast_1d(np.asarray(check["Freqs"], dtype=float))
@@ -147,4 +149,5 @@ class CalibrationDisplay(pg.GraphicsLayoutWidget):
             symbolPen=None,
             name="Measured (bandpass)",
         )
+        panel.setYRange(0.0, LEGEND_HEADROOM * np.max(check["dBSPL_bp"]), padding=0)
         panel.setTitle(f"75 dB check: {made:%Y-%m-%d %H:%M:%S} ({path.name:s})")
