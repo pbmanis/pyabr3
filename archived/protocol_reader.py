@@ -1,5 +1,5 @@
 from pyqtgraph import configfile
-import convert_nested_ordered_dict
+from src import convert_nested_ordered_dict
 from pathlib import Path
 
 class ProtocolReader():

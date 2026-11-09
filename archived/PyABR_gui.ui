@@ -1,0 +1,1296 @@
+<ui version="4.0" >
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow" >
+  <property name="geometry" >
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>821</width>
+    <height>579</height>
+   </rect>
+  </property>
+  <property name="windowTitle" >
+   <string>MainWindow</string>
+  </property>
+  <widget class="QWidget" name="centralwidget" >
+   <property name="geometry" >
+    <rect>
+     <x>0</x>
+     <y>22</y>
+     <width>821</width>
+     <height>535</height>
+    </rect>
+   </property>
+   <widget class="QPushButton" name="ExportFigsAsPDF" >
+    <property name="geometry" >
+     <rect>
+      <x>680</x>
+      <y>380</y>
+      <width>113</width>
+      <height>41</height>
+     </rect>
+    </property>
+    <property name="font" >
+     <font>
+      <pointsize>11</pointsize>
+     </font>
+    </property>
+    <property name="text" >
+     <string>Plots to Data 
+Notebook</string>
+    </property>
+    <property name="default" >
+     <bool>false</bool>
+    </property>
+    <property name="flat" >
+     <bool>false</bool>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="OpenButton" >
+    <property name="geometry" >
+     <rect>
+      <x>0</x>
+      <y>30</y>
+      <width>113</width>
+      <height>41</height>
+     </rect>
+    </property>
+    <property name="text" >
+     <string>Open File</string>
+    </property>
+    <property name="autoDefault" >
+     <bool>true</bool>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="ReOpenButton" >
+    <property name="geometry" >
+     <rect>
+      <x>360</x>
+      <y>30</y>
+      <width>113</width>
+      <height>41</height>
+     </rect>
+    </property>
+    <property name="text" >
+     <string>re-Read</string>
+    </property>
+    <property name="autoDefault" >
+     <bool>true</bool>
+    </property>
+   </widget>
+   <widget class="QTabWidget" name="AcquisitionTabs" >
+    <property name="geometry" >
+     <rect>
+      <x>350</x>
+      <y>80</y>
+      <width>421</width>
+      <height>271</height>
+     </rect>
+    </property>
+    <property name="tabPosition" >
+     <enum>QTabWidget::North</enum>
+    </property>
+    <property name="tabShape" >
+     <enum>QTabWidget::Triangular</enum>
+    </property>
+    <property name="currentIndex" >
+     <number>0</number>
+    </property>
+    <property name="elideMode" >
+     <enum>Qt::ElideMiddle</enum>
+    </property>
+    <property name="usesScrollButtons" >
+     <bool>false</bool>
+    </property>
+    <widget class="QWidget" name="tab" >
+     <property name="geometry" >
+      <rect>
+       <x>0</x>
+       <y>0</y>
+       <width>415</width>
+       <height>242</height>
+      </rect>
+     </property>
+     <attribute name="title" >
+      <string>Click ABR</string>
+     </attribute>
+     <widget class="QGroupBox" name="groupBox" >
+      <property name="geometry" >
+       <rect>
+        <x>20</x>
+        <y>10</y>
+        <width>381</width>
+        <height>221</height>
+       </rect>
+      </property>
+      <property name="title" >
+       <string>Click ABR Parameters</string>
+      </property>
+      <widget class="QWidget" name="layoutWidget" >
+       <property name="geometry" >
+        <rect>
+         <x>10</x>
+         <y>30</y>
+         <width>241</width>
+         <height>142</height>
+        </rect>
+       </property>
+       <layout class="QHBoxLayout" name="horizontalLayout_2" >
+        <item>
+         <layout class="QVBoxLayout" name="verticalLayout_5" >
+          <item>
+           <widget class="QLabel" name="label" >
+            <property name="text" >
+             <string>Minimum (dB SPL)</string>
+            </property>
+            <property name="alignment" >
+             <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="label_2" >
+            <property name="text" >
+             <string>Maximum (dB SPL)</string>
+            </property>
+            <property name="alignment" >
+             <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="label_3" >
+            <property name="text" >
+             <string>Step (dB SPL)</string>
+            </property>
+            <property name="alignment" >
+             <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="label_4" >
+            <property name="text" >
+             <string>Test Level (dB SPL)</string>
+            </property>
+            <property name="alignment" >
+             <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QVBoxLayout" name="verticalLayout_4" >
+          <item>
+           <widget class="QDoubleSpinBox" name="CCIV_Delay" >
+            <property name="sizePolicy" >
+             <sizepolicy vsizetype="Maximum" hsizetype="Minimum" >
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="font" >
+             <font>
+              <family>Courier New</family>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="alignment" >
+             <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+            </property>
+            <property name="decimals" >
+             <number>1</number>
+            </property>
+            <property name="maximum" >
+             <double>120.000000000000000</double>
+            </property>
+            <property name="singleStep" >
+             <double>5.000000000000000</double>
+            </property>
+            <property name="value" >
+             <double>40.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QDoubleSpinBox" name="CCIV_preDelay" >
+            <property name="sizePolicy" >
+             <sizepolicy vsizetype="Maximum" hsizetype="Minimum" >
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="font" >
+             <font>
+              <family>Courier New</family>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="alignment" >
+             <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+            </property>
+            <property name="decimals" >
+             <number>1</number>
+            </property>
+            <property name="maximum" >
+             <double>120.000000000000000</double>
+            </property>
+            <property name="singleStep" >
+             <double>5.000000000000000</double>
+            </property>
+            <property name="value" >
+             <double>100.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QDoubleSpinBox" name="CCIV_Duration" >
+            <property name="sizePolicy" >
+             <sizepolicy vsizetype="Maximum" hsizetype="Minimum" >
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="font" >
+             <font>
+              <family>Courier New</family>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="alignment" >
+             <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+            </property>
+            <property name="decimals" >
+             <number>1</number>
+            </property>
+            <property name="minimum" >
+             <double>1.000000000000000</double>
+            </property>
+            <property name="maximum" >
+             <double>60.000000000000000</double>
+            </property>
+            <property name="singleStep" >
+             <double>0.500000000000000</double>
+            </property>
+            <property name="value" >
+             <double>5.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QDoubleSpinBox" name="ClickTestLevel" >
+            <property name="sizePolicy" >
+             <sizepolicy vsizetype="Maximum" hsizetype="Minimum" >
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="font" >
+             <font>
+              <family>Courier New</family>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="alignment" >
+             <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+            </property>
+            <property name="decimals" >
+             <number>1</number>
+            </property>
+            <property name="minimum" >
+             <double>0.000000000000000</double>
+            </property>
+            <property name="maximum" >
+             <double>100.000000000000000</double>
+            </property>
+            <property name="singleStep" >
+             <double>5.000000000000000</double>
+            </property>
+            <property name="value" >
+             <double>80.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QPushButton" name="Click_DoTestABR" >
+       <property name="geometry" >
+        <rect>
+         <x>260</x>
+         <y>30</y>
+         <width>113</width>
+         <height>41</height>
+        </rect>
+       </property>
+       <property name="text" >
+        <string>Test ABR</string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="Click_DoABR" >
+       <property name="geometry" >
+        <rect>
+         <x>260</x>
+         <y>70</y>
+         <width>113</width>
+         <height>41</height>
+        </rect>
+       </property>
+       <property name="text" >
+        <string>Click ABR</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="label_6" >
+       <property name="geometry" >
+        <rect>
+         <x>10</x>
+         <y>180</y>
+         <width>114</width>
+         <height>31</height>
+        </rect>
+       </property>
+       <property name="text" >
+        <string>Averages</string>
+       </property>
+       <property name="alignment" >
+        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+       </property>
+      </widget>
+      <widget class="QDoubleSpinBox" name="ClickNreps" >
+       <property name="geometry" >
+        <rect>
+         <x>140</x>
+         <y>180</y>
+         <width>112</width>
+         <height>27</height>
+        </rect>
+       </property>
+       <property name="sizePolicy" >
+        <sizepolicy vsizetype="Maximum" hsizetype="Minimum" >
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="font" >
+        <font>
+         <family>Courier New</family>
+         <weight>75</weight>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="alignment" >
+        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+       </property>
+       <property name="decimals" >
+        <number>0</number>
+       </property>
+       <property name="minimum" >
+        <double>10.000000000000000</double>
+       </property>
+       <property name="maximum" >
+        <double>2000.000000000000000</double>
+       </property>
+       <property name="singleStep" >
+        <double>50.000000000000000</double>
+       </property>
+       <property name="value" >
+        <double>500.000000000000000</double>
+       </property>
+      </widget>
+     </widget>
+    </widget>
+    <widget class="QWidget" name="tab_2" >
+     <property name="geometry" >
+      <rect>
+       <x>0</x>
+       <y>0</y>
+       <width>415</width>
+       <height>242</height>
+      </rect>
+     </property>
+     <attribute name="title" >
+      <string>Tone ABR</string>
+     </attribute>
+     <widget class="QPushButton" name="EPSC_Analyze" >
+      <property name="geometry" >
+       <rect>
+        <x>300</x>
+        <y>200</y>
+        <width>113</width>
+        <height>41</height>
+       </rect>
+      </property>
+      <property name="text" >
+       <string>Analyze</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="getMouseBaseline" >
+      <property name="geometry" >
+       <rect>
+        <x>20</x>
+        <y>50</y>
+        <width>134</width>
+        <height>35</height>
+       </rect>
+      </property>
+      <property name="sizePolicy" >
+       <sizepolicy vsizetype="Preferred" hsizetype="Minimum" >
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="text" >
+       <string>Get Baseline</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="getMouseSlope" >
+      <property name="geometry" >
+       <rect>
+        <x>20</x>
+        <y>85</y>
+        <width>134</width>
+        <height>35</height>
+       </rect>
+      </property>
+      <property name="sizePolicy" >
+       <sizepolicy vsizetype="Preferred" hsizetype="Minimum" >
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="text" >
+       <string>Get EPSP Slope</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="getMouseMax" >
+      <property name="geometry" >
+       <rect>
+        <x>20</x>
+        <y>120</y>
+        <width>134</width>
+        <height>35</height>
+       </rect>
+      </property>
+      <property name="sizePolicy" >
+       <sizepolicy vsizetype="Preferred" hsizetype="Minimum" >
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="text" >
+       <string>Get EPSP Max</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_5" >
+      <property name="geometry" >
+       <rect>
+        <x>190</x>
+        <y>20</y>
+        <width>91</width>
+        <height>18</height>
+       </rect>
+      </property>
+      <property name="text" >
+       <string>Start WIndow</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="EPSC_AnalyzeClear" >
+      <property name="geometry" >
+       <rect>
+        <x>20</x>
+        <y>200</y>
+        <width>131</width>
+        <height>41</height>
+       </rect>
+      </property>
+      <property name="text" >
+       <string>Clear Analysis</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="getMouseMax_2" >
+      <property name="geometry" >
+       <rect>
+        <x>20</x>
+        <y>155</y>
+        <width>134</width>
+        <height>35</height>
+       </rect>
+      </property>
+      <property name="sizePolicy" >
+       <sizepolicy vsizetype="Preferred" hsizetype="Minimum" >
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="text" >
+       <string>Slope Win (ms)</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_13" >
+      <property name="geometry" >
+       <rect>
+        <x>300</x>
+        <y>20</y>
+        <width>91</width>
+        <height>18</height>
+       </rect>
+      </property>
+      <property name="text" >
+       <string>End WIndow</string>
+      </property>
+     </widget>
+     <widget class="QWidget" name="layoutWidget_2" >
+      <property name="geometry" >
+       <rect>
+        <x>170</x>
+        <y>50</y>
+        <width>111</width>
+        <height>140</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_6" >
+       <item>
+        <widget class="QDoubleSpinBox" name="BaselineT0" >
+         <property name="alignment" >
+          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         </property>
+         <property name="maximum" >
+          <double>20000.000000000000000</double>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QDoubleSpinBox" name="dEPSPT0" >
+         <property name="alignment" >
+          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         </property>
+         <property name="maximum" >
+          <double>20000.000000000000000</double>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QDoubleSpinBox" name="MaxEPSPT0" >
+         <property name="alignment" >
+          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         </property>
+         <property name="maximum" >
+          <double>20000.000000000000000</double>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QDoubleSpinBox" name="SlopeWin" >
+         <property name="alignment" >
+          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         </property>
+         <property name="maximum" >
+          <double>20000.000000000000000</double>
+         </property>
+         <property name="singleStep" >
+          <double>0.200000000000000</double>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="layoutWidget_3" >
+      <property name="geometry" >
+       <rect>
+        <x>290</x>
+        <y>50</y>
+        <width>111</width>
+        <height>103</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_7" >
+       <item>
+        <widget class="QDoubleSpinBox" name="BaselineT1" >
+         <property name="alignment" >
+          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         </property>
+         <property name="maximum" >
+          <double>20000.000000000000000</double>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QDoubleSpinBox" name="dEPSPT1" >
+         <property name="alignment" >
+          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         </property>
+         <property name="maximum" >
+          <double>20000.000000000000000</double>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QDoubleSpinBox" name="MaxEPSPT1" >
+         <property name="alignment" >
+          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         </property>
+         <property name="maximum" >
+          <double>20000.000000000000000</double>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+    <widget class="QWidget" name="tab_3" >
+     <property name="geometry" >
+      <rect>
+       <x>0</x>
+       <y>0</y>
+       <width>415</width>
+       <height>242</height>
+      </rect>
+     </property>
+     <attribute name="title" >
+      <string>NoiseABR</string>
+     </attribute>
+     <widget class="QPushButton" name="Spikes_PRC" >
+      <property name="geometry" >
+       <rect>
+        <x>270</x>
+        <y>120</y>
+        <width>111</width>
+        <height>35</height>
+       </rect>
+      </property>
+      <property name="sizePolicy" >
+       <sizepolicy vsizetype="Preferred" hsizetype="Minimum" >
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="text" >
+       <string>PRC</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="Spikes_SpikeDetect" >
+      <property name="geometry" >
+       <rect>
+        <x>270</x>
+        <y>30</y>
+        <width>111</width>
+        <height>36</height>
+       </rect>
+      </property>
+      <property name="sizePolicy" >
+       <sizepolicy vsizetype="Preferred" hsizetype="Minimum" >
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="text" >
+       <string>Detect</string>
+      </property>
+     </widget>
+     <widget class="QWidget" name="layoutWidget_4" >
+      <property name="geometry" >
+       <rect>
+        <x>10</x>
+        <y>30</y>
+        <width>240</width>
+        <height>142</height>
+       </rect>
+      </property>
+      <layout class="QHBoxLayout" name="horizontalLayout" >
+       <item>
+        <layout class="QVBoxLayout" name="verticalLayout" >
+         <item>
+          <widget class="QLabel" name="label_9" >
+           <property name="text" >
+            <string>Spike Thresh (mV)</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_12" >
+           <property name="text" >
+            <string>I Thresh (pA)</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_11" >
+           <property name="text" >
+            <string>Delay</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_10" >
+           <property name="text" >
+            <string>Pulse Dur</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QVBoxLayout" name="verticalLayout_2" >
+         <item>
+          <widget class="QDoubleSpinBox" name="Spikes_SpikeThreshold" >
+           <property name="font" >
+            <font>
+             <family>Courier New</family>
+             <weight>75</weight>
+             <bold>true</bold>
+            </font>
+           </property>
+           <property name="alignment" >
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           </property>
+           <property name="minimum" >
+            <double>-100.000000000000000</double>
+           </property>
+           <property name="maximum" >
+            <double>100.000000000000000</double>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QDoubleSpinBox" name="Spikes_IThreshold" >
+           <property name="font" >
+            <font>
+             <family>Courier New</family>
+             <weight>75</weight>
+             <bold>true</bold>
+            </font>
+           </property>
+           <property name="alignment" >
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           </property>
+           <property name="minimum" >
+            <double>-10000.000000000000000</double>
+           </property>
+           <property name="maximum" >
+            <double>10000.000000000000000</double>
+           </property>
+           <property name="singleStep" >
+            <double>20.000000000000000</double>
+           </property>
+           <property name="value" >
+            <double>100.000000000000000</double>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QDoubleSpinBox" name="Spikes_Delay" >
+           <property name="font" >
+            <font>
+             <family>Courier New</family>
+             <weight>75</weight>
+             <bold>true</bold>
+            </font>
+           </property>
+           <property name="alignment" >
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           </property>
+           <property name="maximum" >
+            <double>1000.000000000000000</double>
+           </property>
+           <property name="singleStep" >
+            <double>5.000000000000000</double>
+           </property>
+           <property name="value" >
+            <double>10.000000000000000</double>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QDoubleSpinBox" name="Spikes_Duration" >
+           <property name="font" >
+            <font>
+             <family>Courier New</family>
+             <weight>75</weight>
+             <bold>true</bold>
+            </font>
+           </property>
+           <property name="alignment" >
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           </property>
+           <property name="maximum" >
+            <double>5000.000000000000000</double>
+           </property>
+           <property name="singleStep" >
+            <double>10.000000000000000</double>
+           </property>
+           <property name="value" >
+            <double>100.000000000000000</double>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QPushButton" name="PRC_Export" >
+      <property name="geometry" >
+       <rect>
+        <x>270</x>
+        <y>200</y>
+        <width>113</width>
+        <height>41</height>
+       </rect>
+      </property>
+      <property name="font" >
+       <font>
+        <pointsize>11</pointsize>
+       </font>
+      </property>
+      <property name="text" >
+       <string>Push Data
+to IGOR</string>
+      </property>
+      <property name="default" >
+       <bool>false</bool>
+      </property>
+      <property name="flat" >
+       <bool>false</bool>
+      </property>
+     </widget>
+    </widget>
+    <widget class="QWidget" name="tab_5" >
+     <property name="geometry" >
+      <rect>
+       <x>0</x>
+       <y>0</y>
+       <width>415</width>
+       <height>242</height>
+      </rect>
+     </property>
+     <attribute name="title" >
+      <string>Spectrum</string>
+     </attribute>
+     <widget class="QPushButton" name="SPECT_Analyze" >
+      <property name="geometry" >
+       <rect>
+        <x>300</x>
+        <y>200</y>
+        <width>113</width>
+        <height>41</height>
+       </rect>
+      </property>
+      <property name="text" >
+       <string>Spectrogram</string>
+      </property>
+      <property name="autoDefault" >
+       <bool>true</bool>
+      </property>
+     </widget>
+    </widget>
+    <widget class="QWidget" name="tab_4" >
+     <property name="geometry" >
+      <rect>
+       <x>0</x>
+       <y>0</y>
+       <width>415</width>
+       <height>242</height>
+      </rect>
+     </property>
+     <attribute name="title" >
+      <string>VCIV</string>
+     </attribute>
+    </widget>
+   </widget>
+   <widget class="QPushButton" name="ExportBlockButton" >
+    <property name="geometry" >
+     <rect>
+      <x>460</x>
+      <y>380</y>
+      <width>113</width>
+      <height>41</height>
+     </rect>
+    </property>
+    <property name="text" >
+     <string>Export Block</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="ExportVisibleButton" >
+    <property name="geometry" >
+     <rect>
+      <x>350</x>
+      <y>380</y>
+      <width>113</width>
+      <height>41</height>
+     </rect>
+    </property>
+    <property name="text" >
+     <string>Export Visble</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="BlockLabel" >
+    <property name="geometry" >
+     <rect>
+      <x>130</x>
+      <y>30</y>
+      <width>231</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="text" >
+     <string>Filename  [# blks]</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="CloseDataWindows" >
+    <property name="geometry" >
+     <rect>
+      <x>520</x>
+      <y>40</y>
+      <width>141</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="font" >
+     <font>
+      <pointsize>11</pointsize>
+     </font>
+    </property>
+    <property name="text" >
+     <string>Close Data Windows</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="QuitButton" >
+    <property name="geometry" >
+     <rect>
+      <x>670</x>
+      <y>30</y>
+      <width>113</width>
+      <height>41</height>
+     </rect>
+    </property>
+    <property name="text" >
+     <string>Quit</string>
+    </property>
+   </widget>
+   <widget class="QLCDNumber" name="lcdYNumber" >
+    <property name="geometry" >
+     <rect>
+      <x>70</x>
+      <y>470</y>
+      <width>91</width>
+      <height>23</height>
+     </rect>
+    </property>
+    <property name="font" >
+     <font>
+      <pointsize>8</pointsize>
+     </font>
+    </property>
+    <property name="lineWidth" >
+     <number>1</number>
+    </property>
+    <property name="smallDecimalPoint" >
+     <bool>true</bool>
+    </property>
+    <property name="numDigits" >
+     <number>7</number>
+    </property>
+    <property name="segmentStyle" >
+     <enum>QLCDNumber::Flat</enum>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="DisplayButton" >
+    <property name="geometry" >
+     <rect>
+      <x>0</x>
+      <y>80</y>
+      <width>113</width>
+      <height>41</height>
+     </rect>
+    </property>
+    <property name="text" >
+     <string>Display</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="ExportIGORButton" >
+    <property name="geometry" >
+     <rect>
+      <x>570</x>
+      <y>380</y>
+      <width>113</width>
+      <height>41</height>
+     </rect>
+    </property>
+    <property name="font" >
+     <font>
+      <pointsize>11</pointsize>
+     </font>
+    </property>
+    <property name="text" >
+     <string>Push Data
+to IGOR</string>
+    </property>
+    <property name="default" >
+     <bool>false</bool>
+    </property>
+    <property name="flat" >
+     <bool>false</bool>
+    </property>
+   </widget>
+   <widget class="QDoubleSpinBox" name="Record_Skip" >
+    <property name="geometry" >
+     <rect>
+      <x>190</x>
+      <y>80</y>
+      <width>71</width>
+      <height>27</height>
+     </rect>
+    </property>
+    <property name="sizePolicy" >
+     <sizepolicy vsizetype="Maximum" hsizetype="Minimum" >
+      <horstretch>0</horstretch>
+      <verstretch>0</verstretch>
+     </sizepolicy>
+    </property>
+    <property name="font" >
+     <font>
+      <family>Courier New</family>
+      <weight>75</weight>
+      <bold>true</bold>
+     </font>
+    </property>
+    <property name="alignment" >
+     <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+    </property>
+    <property name="decimals" >
+     <number>0</number>
+    </property>
+    <property name="minimum" >
+     <double>1.000000000000000</double>
+    </property>
+    <property name="maximum" >
+     <double>1000.000000000000000</double>
+    </property>
+    <property name="singleStep" >
+     <double>1.000000000000000</double>
+    </property>
+    <property name="value" >
+     <double>1.000000000000000</double>
+    </property>
+   </widget>
+   <widget class="QLCDNumber" name="lcdXNumber" >
+    <property name="geometry" >
+     <rect>
+      <x>70</x>
+      <y>440</y>
+      <width>91</width>
+      <height>23</height>
+     </rect>
+    </property>
+    <property name="font" >
+     <font>
+      <pointsize>8</pointsize>
+     </font>
+    </property>
+    <property name="lineWidth" >
+     <number>1</number>
+    </property>
+    <property name="smallDecimalPoint" >
+     <bool>true</bool>
+    </property>
+    <property name="numDigits" >
+     <number>7</number>
+    </property>
+    <property name="segmentStyle" >
+     <enum>QLCDNumber::Flat</enum>
+    </property>
+   </widget>
+   <widget class="QListWidget" name="Status_Window" >
+    <property name="geometry" >
+     <rect>
+      <x>350</x>
+      <y>430</y>
+      <width>441</width>
+      <height>91</height>
+     </rect>
+    </property>
+    <property name="font" >
+     <font>
+      <family>Gill Sans Light</family>
+      <pointsize>11</pointsize>
+     </font>
+    </property>
+    <property name="cursor" stdset="0" >
+     <cursorShape>PointingHandCursor</cursorShape>
+    </property>
+    <property name="focusPolicy" >
+     <enum>Qt::NoFocus</enum>
+    </property>
+    <property name="toolTip" >
+     <string comment="Status Window" >Click to select data to load and display</string>
+    </property>
+    <property name="editTriggers" >
+     <set>QAbstractItemView::NoEditTriggers</set>
+    </property>
+    <property name="tabKeyNavigation" >
+     <bool>true</bool>
+    </property>
+    <property name="showDropIndicator" stdset="0" >
+     <bool>false</bool>
+    </property>
+    <property name="alternatingRowColors" >
+     <bool>true</bool>
+    </property>
+    <property name="selectionMode" >
+     <enum>QAbstractItemView::ExtendedSelection</enum>
+    </property>
+    <property name="selectionBehavior" >
+     <enum>QAbstractItemView::SelectRows</enum>
+    </property>
+    <property name="movement" >
+     <enum>QListView::Static</enum>
+    </property>
+    <property name="layoutMode" >
+     <enum>QListView::SinglePass</enum>
+    </property>
+    <property name="batchSize" >
+     <number>1</number>
+    </property>
+    <property name="wordWrap" >
+     <bool>true</bool>
+    </property>
+   </widget>
+   <widget class="QListWidget" name="BlockList" >
+    <property name="geometry" >
+     <rect>
+      <x>10</x>
+      <y>120</y>
+      <width>331</width>
+      <height>291</height>
+     </rect>
+    </property>
+    <property name="font" >
+     <font>
+      <family>Gill Sans Light</family>
+      <pointsize>11</pointsize>
+     </font>
+    </property>
+    <property name="cursor" stdset="0" >
+     <cursorShape>PointingHandCursor</cursorShape>
+    </property>
+    <property name="toolTip" >
+     <string>Click to select data to load and display</string>
+    </property>
+    <property name="editTriggers" >
+     <set>QAbstractItemView::NoEditTriggers</set>
+    </property>
+    <property name="tabKeyNavigation" >
+     <bool>true</bool>
+    </property>
+    <property name="showDropIndicator" stdset="0" >
+     <bool>false</bool>
+    </property>
+    <property name="alternatingRowColors" >
+     <bool>true</bool>
+    </property>
+    <property name="selectionMode" >
+     <enum>QAbstractItemView::ExtendedSelection</enum>
+    </property>
+    <property name="selectionBehavior" >
+     <enum>QAbstractItemView::SelectRows</enum>
+    </property>
+   </widget>
+   <widget class="QDoubleSpinBox" name="Record_Offset" >
+    <property name="geometry" >
+     <rect>
+      <x>110</x>
+      <y>80</y>
+      <width>71</width>
+      <height>27</height>
+     </rect>
+    </property>
+    <property name="sizePolicy" >
+     <sizepolicy vsizetype="Maximum" hsizetype="Minimum" >
+      <horstretch>0</horstretch>
+      <verstretch>0</verstretch>
+     </sizepolicy>
+    </property>
+    <property name="font" >
+     <font>
+      <family>Courier New</family>
+      <weight>75</weight>
+      <bold>true</bold>
+     </font>
+    </property>
+    <property name="alignment" >
+     <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+    </property>
+    <property name="decimals" >
+     <number>0</number>
+    </property>
+    <property name="maximum" >
+     <double>1000.000000000000000</double>
+    </property>
+    <property name="singleStep" >
+     <double>1.000000000000000</double>
+    </property>
+    <property name="value" >
+     <double>0.000000000000000</double>
+    </property>
+   </widget>
+   <widget class="QLabel" name="BlockLabel_2" >
+    <property name="geometry" >
+     <rect>
+      <x>120</x>
+      <y>60</y>
+      <width>141</width>
+      <height>16</height>
+     </rect>
+    </property>
+    <property name="text" >
+     <string>Offset             Skip</string>
+    </property>
+   </widget>
+  </widget>
+  <widget class="QMenuBar" name="menubar" >
+   <property name="geometry" >
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>821</width>
+     <height>22</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuFile" >
+    <property name="title" >
+     <string>File</string>
+    </property>
+   </widget>
+   <widget class="QMenu" name="menuDatabase" >
+    <property name="title" >
+     <string>Database</string>
+    </property>
+   </widget>
+   <widget class="QMenu" name="menuEdit" >
+    <property name="title" >
+     <string>Edit</string>
+    </property>
+   </widget>
+   <addaction name="menuFile" />
+   <addaction name="menuDatabase" />
+   <addaction name="menuEdit" />
+  </widget>
+  <widget class="QStatusBar" name="statusbar" >
+   <property name="geometry" >
+    <rect>
+     <x>0</x>
+     <y>557</y>
+     <width>821</width>
+     <height>22</height>
+    </rect>
+   </property>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
