@@ -144,3 +144,116 @@ OPEN ITEMS
 5. ABRPlotting/ABR_Datasets.py sets 50 kHz for the Reggie datasets, which include 2023 and
    2024 recordings. Those should be 100 kHz under the assumption above.
 6. pyabr3.egg-info in the repository still says version 0.1.0 and can be removed by hand.
+
+
+=======================================================
+Second session of 2026-11-09: documentation and acquisition fixes
+=======================================================
+
+Goal: Sphinx API documentation, a draft LaTeX user manual, then fixes to the problems in
+acquisition found while writing the manual.
+
+STATUS
+------
+- 119 tests pass. Each change below was also exercised by driving the real PyABR program
+  with a fake sound device (scripts kept outside the repository).
+- NOT yet done: nothing has run on the rig.
+- This supersedes Open Item 4 above on "datapath": it is now used when writing.
+
+
+FILES ADDED
+-----------
+doc/                  Sphinx: conf.py, Makefile, index.rst, api/*.rst
+                      Build: make -C doc html    Output: doc/build/html/index.html
+doc_tex/              Manual: pyabr3_manual.tex, chapters/01-06, figures/, figures_needed.md,
+                      Makefile. Build: make -C doc_tex    Output: doc_tex/build/pyabr3_manual.pdf
+                      10 figures are still placeholders; a file with the listed name in
+                      doc_tex/figures/ replaces the box, with no .tex edit.
+
+
+FILES CHANGED
+-------------
+src/pyabr3.py
+  - Subject ID required for Start Acquisition; new get_subject_id.
+  - Each recording saved to its own serial-numbered directory; new next_run_directory.
+  - Data Path choice; new get_data_paths.
+  - Presentation loop started only if none is running.
+  - Start and Test refused during a run; new acquisition_in_progress.
+  - On-line average reset by clear_average.
+  - Parameters panel shows the protocol's values at startup.
+  - Unreachable levels reported by message before anything is presented.
+src/presenter_thread.py      setWaveforms clears _finished, because the loop is reused.
+src/build_parametertree.py   Data Path list added; Parameters read-only, limits removed.
+src/wave_generator.py        One interleaved waveform entry; UnreachableLevelError and
+                             check_tone_levels; click level check.
+pyproject.toml               "docs" dependency group (sphinx, sphinx-rtd-theme).
+uv.lock                      Regenerated. This also moved requests from 2.32.4 to 2.34.2.
+
+Not modified: config/, calfiles/, nidaq/, protocols/. No git commands were run by Claude
+and no files were deleted.
+
+
+BUGS FIXED
+----------
+- Every saved file stored the Subject ID as "testing". Start Acquisition now requires an
+  ID (and refuses \ / : * ? " < > |, since it is part of a directory name). Test
+  Acquisition saves nothing and needs no ID.
+- A repeat of a stimulus type on one day overwrote the first, unless the files had been
+  moved; datapath was ignored. Files now go to
+    <datapath>/<date>-<Subject ID>_<serial>/<protocol>/
+  with the serial from 000, as in acq4. Different protocols on one subject share _000; a
+  repeat of a protocol goes to _001. File names are unchanged.
+- Each acquisition started another Presenter.run loop. The extra loop died on the "NIDAQ
+  task has not been released" check, skipping a repetition. A loop now starts only if none
+  is running, so a loop that died on an error is replaced by the next acquisition.
+- interleaved_plateau stored one waveform entry per level, so it ran nreps sweeps per level
+  (4608 instead of 512 for interleaved_plateau), and it played the entry without the final
+  scaling. Levels were low by the smallest attenuation (about 2.9 dB for
+  interleaved_plateau and 43 dB for interleaved_plateau_low, with frequency_MF1.cal).
+- The on-line average was not reset between click or tone stimuli; only the plot was
+  cleared. It now restarts at each stimulus. Interleaved protocols average all sweeps.
+- The Parameters panel accepted edits and discarded them, and its limits clamped the
+  displayed values. It is now read-only and shows the true values.
+- Tone pips above the calibrated maximum were sent with negative attenuation and no warning.
+  Tone pips, interleaved protocols and clicks are now all checked when Start or Test is
+  pressed, and a message lists every level that cannot be reached.
+
+
+ADDED
+-----
+- Data Path list in the panel, from "datapaths" in the configuration. With more than one
+  name, Start Acquisition requires a choice. A single "datapath" entry still works.
+    datapaths:
+        Reggie: "d:\\data\\reggie\\abr_data"
+        Paul_projectA: "c:\\users\\experimenters\\desktop\\pyabr\\abr_data"
+- Start and Test are refused while a protocol is running or paused.
+
+
+DECISIONS
+---------
+- nreps is the sweep count for the whole protocol for interleaved_plateau, and per level
+  for clicks and for basic tone presentations.
+- Protocols are used as saved. Changes are saved as a new protocol.
+- interleaved_ramp and interleaved_random stay disabled and may be re-enabled later.
+- Amplifier gain is 10,000. It cannot be read from the amplifier, so it is an entered value.
+- RP2.1 In1 takes the ABR and In2 the microphone.
+- The RZ5D is not used here: it cannot produce the output frequency for tones above 90 kHz.
+
+
+OPEN ITEMS
+----------
+1. Check the interleaved sound levels with the microphone before the next animal. They
+   have changed (see Bugs Fixed).
+2. Add "datapaths" to config/abrs.cfg and config/abrs_test.cfg (by hand, or ask Claude).
+3. Set nreps to 512 in protocols/interleaved_plateau_low.cfg. It is 5, probably saved
+   while testing.
+4. Propagate the protocol folder names to the analysis code. read_abr.py looks for exact
+   names such as "Click", so "clickIO" is not found. Codify the folder layout.
+5. December 2024 interleaved recordings (p572, p573) have 4 or 9 stored waveform sets, like
+   the bug above. If the first set was played, they were about 2.9 dB below the requested
+   levels. This could not be confirmed, because the code of that date was not examined.
+6. RP2.1 output carrying the trigger: to be taken from the old documentation.
+7. Display only: on-line axes are labeled msec and uV but are in s and V at the amplifier
+   output; Mode alternates between Finished and Running after a protocol ends.
+8. Sphinx reported 37 docstring formatting warnings in existing source on the last full
+   build, and about 321 of 572 functions and classes have no docstring.

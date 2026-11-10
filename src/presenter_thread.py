@@ -93,6 +93,9 @@ class Presenter(QObject):  # (QtCore.QRunnable):
 
         Calling the slot "setWaveforms" sets up and starts the acquisiton sequence.
 
+        Bug: after the last stimulus the loop went on to the "Running" branch, so Mode
+        alternated between Finished and Running. It now waits while finished.
+
         """
         self._running = True
         self.wave_counter = 0
@@ -107,6 +110,7 @@ class Presenter(QObject):  # (QtCore.QRunnable):
                 continue
             if self._finished:
                 self.signal_mode_status.emit("Finished")
+                continue
             if self._paused:
                 self.signal_mode_status.emit("Paused")
                 continue
@@ -234,6 +238,7 @@ class Presenter(QObject):  # (QtCore.QRunnable):
         """
         # get the data we need and trigger the stimulus/acquisition.
         self._running = False
+        self._finished = False  # the run loop is reused between acquisitions
         self.sound_class = sound_presentation_class
         self.wave_matrix = wave
         self.protocol = protocol

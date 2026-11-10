@@ -20,6 +20,10 @@ DAC is "only" 16 bits (96 dB).
 
 """
 
+class UnreachableLevelError(ValueError):
+    """A protocol asks for a level that would need negative attenuation."""
+
+
 class WaveGenerator:
     def __init__(self, caldata):
         self.protocol = None
@@ -59,6 +63,23 @@ class WaveGenerator:
         attn_dB = max_dBSPL - dBSPL
         return attn_dB, max_dBSPL
     
+    def check_tone_levels(self, frequencies, dbspls):
+        """Raise UnreachableLevelError, listing every frequency where a requested level
+        is above the calibrated maximum.
+
+        Bug: tone pips above the calibrated maximum were sent to the attenuator with
+        negative attenuation, with no warning. pyabr3.acquire now reports this before
+        anything is presented, from this check and the one for clicks in make_waveforms.
+        """
+        problems = []
+        for frequency in frequencies:
+            too_high = [db for db in dbspls if self.compute_attn_db_for_dbspl(frequency, db)[0][0] < 0]
+            if len(too_high) > 0:
+                maxdb = self.compute_attn_db_for_dbspl(frequency, 0.0)[1][0]
+                problems.append(f"{frequency:.0f} Hz: maximum {maxdb:.1f} dB SPL, requested {too_high}")
+        if len(problems) > 0:
+            raise UnreachableLevelError("Cannot reach these levels:\n" + "\n".join(problems))
+
     def adjust_dbspl(self, dbspl_nominal):
         """ adjust_dbspl
             calculate the dbspl target for the signal to be put in the waveform buffer
@@ -86,6 +107,11 @@ class WaveGenerator:
         are in a N x (wave) shape, where N is the number
         of different stimuli. Waveforms are played out in the order
         they appear in this array.
+
+        Bug: interleaved_plateau stored a wave_matrix entry for each level, so
+        presenter_thread.py ran nreps sweeps per level instead of nreps in all, and
+        played the first entry, which lacks the final scaling, so levels were too low
+        by the attenuator setting. There is now one entry, with the whole waveform.
         """
         self.wave_matrix = {}
         if dbspls is None:  # get the list?
@@ -102,6 +128,12 @@ class WaveGenerator:
         match wavetype:
             case "click":
                 print("doing click")
+                too_high = [db for db in dbspls if db > self.config["click_reference_dbspl"]]
+                if len(too_high) > 0:
+                    raise UnreachableLevelError(
+                        f"Cannot reach these click levels: maximum "
+                        f"{self.config['click_reference_dbspl']:.1f} dB SPL, requested {too_high}"
+                    )
                 # clicks are always generated at the maximal voltage, and
                 # attenuated with the attenuator
                 # every collection epoch is for one SPL level
@@ -141,6 +173,7 @@ class WaveGenerator:
                 # tonepips are always generated at the maximal voltage, and
                 # attenuated with the attenuator
                 # every collection epoch is for one frequency and SPL combination
+                self.check_tone_levels(frequencies, dbspls)
                 starts = np.cumsum(
                     np.ones(self.protocol["stimuli"]["nstim"])
                     * self.protocol["stimuli"]["interval"]
@@ -192,6 +225,7 @@ class WaveGenerator:
                 s0 = self.protocol["stimuli"]["delay"]
                 dbs = eval(self.protocol["stimuli"]["dblist"])
                 freqs = eval(self.protocol["stimuli"]["freqlist"])
+                self.check_tone_levels(freqs, dbs)
                 wave_duration = (
                     s0 + len(dbs) * len(freqs) * dt + dt
                 )  # duration of the waveform
@@ -251,15 +285,15 @@ class WaveGenerator:
                         # print(f"     max wave out: {np.max(tone_waveform):8.4f} V, (started with: {read_calibration.SPLCAL_Tone_Voltage*np.max(wave_n.sound):8.4f})")
                         # print("   max w: ", np.max(self.wave_out))
                         n += 1
-                    self.wave_matrix[("interleaved_plateau", attenuator)] = {
-                        "sound": self.wave_out,
-                        "rate": self.sfout,
-                        "dbspls": self.dblist,
-                        "frequencies": self.freqlist,
-                        "attenuation": self.attenuatorlist,
-                        "pip_starts": self.pip_starts,
-                        "pip_durations": self.pip_durations,
-                    }
+                self.wave_matrix[("interleaved_plateau", attenuator)] = {
+                    "sound": self.wave_out,
+                    "rate": self.sfout,
+                    "dbspls": self.dblist,
+                    "frequencies": self.freqlist,
+                    "attenuation": self.attenuatorlist,
+                    "pip_starts": self.pip_starts,
+                    "pip_durations": self.pip_durations,
+                }
                 vmax = np.max(self.wave_matrix['interleaved_plateau', attenuator]["sound"])
                 full_scale = read_calibration.SPLCAL_Tone_Voltage/vmax
                 db_diff = 20*np.log10(full_scale/vmax)

@@ -38,11 +38,13 @@ import src.read_abr as read_abr
 import src.message_box as MBox
 from src.calibration import cal_chooser, cal_display, calibration_gui
 from src.calibration.hardware import MockCalibrationHardware, PyStimCalibrationHardware
-from src.viewer import data_viewer
+from src.viewer import abr_files, data_viewer
 
 MAX_CLICK = 105.1  # SPL for maximum click
 
 THREAD_PERIOD = 20  # thread period, in msec
+
+ONLINE_UV_PER_VOLT = abr_files.VOLTS_TO_UV / abr_files.AMPLIFIER_GAIN  # uV at the electrodes
 
 
 class PyABR(QtCore.QObject):
@@ -87,6 +89,7 @@ class PyABR(QtCore.QObject):
         self.read_protocol_directory()
         self.acq_mode = "test"
         self.basefn = None  # base file path/name for saving data
+        self.run_directory = None  # where the current recording is saved
         self.buildGUI()
         self.PR.update_protocol(self.ptreedata)
         self.update_devices(devices=self.hardware)
@@ -179,8 +182,12 @@ class PyABR(QtCore.QObject):
         # print(dir(self.dockArea))
         self.Dock_Params.raise_()
         self.ptree, self.ptreedata = build_parametertree(
-            self.known_protocols, self.current_protocol, stimuli=self.stim["stimuli"]
+            self.known_protocols,
+            self.current_protocol,
+            stimuli=self.stim["stimuli"],
+            data_path_names=list(self.get_data_paths()),
         )
+        self.PR.update_protocol(ptreedata=self.ptreedata)  # show the protocol's values
         self.Dock_Params.addWidget(self.ptree)
 
         self.build_recording_graphs()
@@ -386,7 +393,7 @@ class PyABR(QtCore.QObject):
         t = np.arange(0, len(first_sound["sound"]) / float(first_sound["rate"]), 1.0 / first_sound["rate"])
         if len(t) > len(first_sound["sound"]):
             t = t[:len(first_sound["sound"])]
-        t = t + 750e-6  # measured delay added in circuit in pystim3.abr
+        t = (t + 750e-6) * 1e3  # msec; measured delay added in circuit in pystim3.abr
         if (self.raw_clear_N > 0) and ((n % self.raw_clear_N) == 0):
             self.stimulus_waveform.clear()
             self.stimulus_waveform.setXRange(0, np.max(t))
@@ -465,6 +472,41 @@ class PyABR(QtCore.QObject):
         #     print(k, np.max(self.wave_matrix[k]["sound"]))
         self.plot_stimulus_wave(n)
 
+    def acquisition_in_progress(self) -> bool:
+        """Return True while a protocol is running or paused. A presentation loop
+        that has died on a hardware error does not count, so it cannot block the next run.
+        """
+        return (
+            self.threadpool.activeThreadCount() > 0
+            and self.Presenter._running
+            and not self.Presenter._finished
+        )
+
+    def get_subject_id(self) -> str:
+        """Return the Subject ID entered in the parameter tree (blank if none)."""
+        return self.ptreedata.child("Subject Data", "Subject ID").value().strip()
+
+    def get_data_paths(self) -> dict:
+        """Return the data locations from the configuration, as {name: path}.
+        A configuration with only the single "datapath" entry gives one location.
+        """
+        if "datapaths" in self.config:
+            return dict(self.config["datapaths"])
+        return {"default": self.config["datapath"]}
+
+    def next_run_directory(self) -> Path:
+        """Return the first unused directory for this subject and protocol, with a
+        serial number as in acq4: <datapath>/2024-12-10-p572_000/interleaved_plateau.
+        A repeat of the protocol goes in <datapath>/2024-12-10-p572_001/interleaved_plateau.
+        """
+        base = f"{self.basefn:s}-{self.get_subject_id():s}"
+        protocol = Path(self.current_protocol).stem
+        datapath = self.get_data_paths()[self.ptreedata.child("Data Path").value()]
+        serial = 0
+        while Path(datapath, f"{base:s}_{serial:03d}", protocol).exists():
+            serial += 1
+        return Path(datapath, f"{base:s}_{serial:03d}", protocol)
+
     def acquire(self, mode: str = "test"):
         """
         present and collect responses without saving - using
@@ -475,7 +517,28 @@ class PyABR(QtCore.QObject):
         Then we can start the player.
         In test mode, we do not save the data....
 
+        Bug: update_ABR replaced the Subject ID with "testing", so no saved file
+        identified its subject. Now a recording (mode "collect") will not start
+        until a Subject ID has been entered, and that ID is what is saved.
+
+        Bug: each acquisition started another Presenter.run loop, and the extra loop
+        died on the "NIDAQ task" check in pystim3.play_sound, skipping a repetition.
+        A loop is now started only if none is running, after the waveforms are set
+        (see also Presenter.setWaveforms in presenter_thread.py).
+
         """
+        if self.acquisition_in_progress():
+            MBox.MessageBox("Press Stop before starting another acquisition.", title="Acquisition")
+            return
+        if mode == "collect" and not self.get_subject_id():
+            MBox.MessageBox("Enter a Subject ID before starting.", title="Acquisition")
+            return
+        if mode == "collect" and any(c in self.get_subject_id() for c in '\\/:*?"<>|'):
+            MBox.MessageBox('A Subject ID cannot contain \\ / : * ? " < > |', title="Acquisition")
+            return
+        if mode == "collect" and self.ptreedata.child("Data Path").value() not in self.get_data_paths():
+            MBox.MessageBox("Choose a Data Path before starting.", title="Acquisition")
+            return
         self.acq_mode = mode
         self.Dock_Recording.raiseDock()
         self.app.processEvents()
@@ -490,13 +553,24 @@ class PyABR(QtCore.QObject):
         if self.protocol["protocol"]["stimulustype"] == "click":
             if len(flist) == 0:
                 flist = [0] * len(self.protocol["stimuli"]["dblist"])
-        self.make_and_plot(
-            n=0,
-            wavetype=self.protocol["protocol"]["stimulustype"],
-            dbspls=self.protocol["stimuli"]["dblist"],
-            frequencies=flist,
-        )
-        self.threadpool.start(self.Presenter.run)  # start the thread.
+        try:
+            self.make_and_plot(
+                n=0,
+                wavetype=self.protocol["protocol"]["stimulustype"],
+                dbspls=self.protocol["stimuli"]["dblist"],
+                frequencies=flist,
+            )
+        except wave_generator.UnreachableLevelError as e:
+            MBox.MessageBox(
+                f"{e!s}\n\nNothing was presented. Reduce the maximum level or the range, "
+                "and save this as a new protocol.",
+                title="Protocol",
+            )
+            return
+        if mode == "collect":
+            self.basefn = datetime.datetime.now().strftime("%Y-%m-%d")
+            self.run_directory = self.next_run_directory()
+            self.run_directory.mkdir(parents=True)
         if mode == "test":
             print("Starting acquisition in test mode")
         self.stimulus_waveform.enableAutoRange()
@@ -509,11 +583,22 @@ class PyABR(QtCore.QObject):
         self.Presenter.setWaveforms(  # new instance of pystim3 each time
             wave=self.wave_matrix, protocol=self.protocol, sound_presentation_class=self.PS
         )
+        if self.threadpool.activeThreadCount() == 0:  # the loop persists between acquisitions
+            self.threadpool.start(self.Presenter.run)  # start the thread.
 
     def update_ABR(self, chdata, wave_counter, repetition_counter):
         """update_ABR Plot the most recent abr data, and keep
-        track of the running average. 
+        track of the running average.
         *** this function is called from the Presenter thread ***
+
+        Bug: every recording was written to abr_data/ under a name made only of the
+        date, stimulus type and counters, so a repeat on the same day overwrote the
+        first, and datapath was ignored. Each recording now has its own directory
+        under datapath, from next_run_directory; the file names are unchanged.
+
+        Bug: the plots are labeled msec and uV, but were drawn in s and V at the
+        amplifier output. They are now drawn in msec and uV at the electrodes, as is
+        the stimulus (plot_stimulus_wave). Saved data remain in V at the amplifier.
 
         Parameters
         ----------
@@ -540,17 +625,19 @@ class PyABR(QtCore.QObject):
             self.summed_buffer = self.summed_buffer + self.ch1_data
         
         _, self.sfin, self.sfout = self.PS.getHardware()
-        self.t_record = np.linspace(0, len(self.ch1_data) / self.sfin, self.ch1_data.shape[0])
+        self.t_record = np.linspace(0, 1e3 * len(self.ch1_data) / self.sfin, self.ch1_data.shape[0])  # msec
         if (self.raw_clear_N > 0) and (((self.TrialCounter-1) % self.raw_clear_N) == 0):
             self.plot_ABR_Raw.clear()
             self.plot_ABR_Raw.setXRange(0, np.max(self.t_record))
 
-        self.plot_ABR_Raw.plot(self.t_record, self.ch1_data, pen=pg.mkPen(pg.intColor(self.TrialCounter-1, hues=10, values=10)))
+        self.plot_ABR_Raw.plot(self.t_record, self.ch1_data * ONLINE_UV_PER_VOLT, pen=pg.mkPen(pg.intColor(self.TrialCounter-1, hues=10, values=10)))
         # self.plot_ABR_Raw.setYRange(-15, 15)
  
         self.plot_ABR_Average.clear()
         self.plot_ABR_Average.plot(
-            self.t_record, self.summed_buffer / float(self.TrialCounter), pen=pg.mkPen("g")
+            self.t_record,
+            self.summed_buffer / float(self.TrialCounter) * ONLINE_UV_PER_VOLT,
+            pen=pg.mkPen("g"),
         )
         self.TrialCounter += 1    
 
@@ -562,6 +649,7 @@ class PyABR(QtCore.QObject):
             if child.name() == "Subject Data":
                 for childs in child:
                     subject_data[childs.name()] = childs.value()
+        subject_data["Subject ID"] = self.get_subject_id()  # same form as the directory name
         # now assemble data and save it
         write_time = datetime.datetime.now()
         wave_copy = copy.deepcopy(self.wave_matrix)
@@ -578,23 +666,23 @@ class PyABR(QtCore.QObject):
             "record_frequency": self.PS.trueFreq,
             "timestamp": write_time,
         }
-        data_directory = Path(self.config["datapath"])
-        if not data_directory.is_dir():
-            Path.mkdir(data_directory, exist_ok=True)  # create if it does not exist.
-        if self.basefn is None:
-            self.basefn = write_time.strftime("%Y-%m-%d")
-        subject_data["Subject ID"] = "testing"
-        self.subject_dir = Path(self.config["datapath"], self.basefn, subject_data["Subject ID"])
         fn = Path(
-            f"abr_data/{self.basefn:s}_{self.protocol['protocol']['stimulustype']:s}_{wave_counter:03d}_{repetition_counter:03d}"
+            self.run_directory,
+            f"{self.basefn:s}_{self.protocol['protocol']['stimulustype']:s}_{wave_counter:03d}_{repetition_counter:03d}.p",
         )
-        fn = str(fn) + ".p"
         print("output file: ", fn)
         with open(fn, "wb") as fh:
             pickle.dump(out_data, fh, protocol=pickle.HIGHEST_PROTOCOL)
         del wave_copy    # delete the wave copy
 
     def clear_average(self):
+        """Start a new on-line average; called when a click or tone stimulus changes.
+
+        Bug: only the plot was cleared, so the next sweep redrew a running average of
+        all the levels so far. Resetting TrialCounter also restarts summed_buffer in
+        update_ABR. Interleaved protocols have one stimulus, so they are not reset.
+        """
+        self.TrialCounter = 1
         self.plot_ABR_Average.clear()
 
     def stop(self):
