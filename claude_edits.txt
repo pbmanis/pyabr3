@@ -182,7 +182,10 @@ src/pyabr3.py
   - On-line average reset by clear_average.
   - Parameters panel shows the protocol's values at startup.
   - Unreachable levels reported by message before anything is presented.
+  - On-line plots in msec and uV at the electrodes; ONLINE_UV_PER_VOLT added.
+  - Freq (kHz) shown in kHz; Status case removed from command_dispatcher.
 src/presenter_thread.py      setWaveforms clears _finished, because the loop is reused.
+                             run waits while finished, so Mode stays at Finished.
 src/build_parametertree.py   Data Path list added; Parameters read-only, limits removed.
 src/wave_generator.py        One interleaved waveform entry; UnreachableLevelError and
                              check_tone_levels; click level check.
@@ -217,6 +220,16 @@ BUGS FIXED
 - Tone pips above the calibrated maximum were sent with negative attenuation and no warning.
   Tone pips, interleaved protocols and clicks are now all checked when Start or Test is
   pressed, and a message lists every level that cannot be reached.
+- The on-line plots were labeled msec and uV but drawn in s and V at the amplifier output.
+  They are now drawn in msec and uV at the electrodes (gain 10,000), and the stimulus plot
+  in msec. Saved data remain in volts at the amplifier output.
+- Mode alternated between Finished and Running after a protocol ended. It now stays at
+  Finished until the next acquisition, and Stop is not needed after a protocol ends.
+- Freq (kHz) in the Status group showed Hz. It now shows kHz.
+- Each level and frequency shown in the Status group was copied into the protocol's
+  default_spl and default_frequency. The Status group no longer alters the protocol. Files
+  saved earlier may hold the last displayed values in those two fields. The stimuli were
+  not affected, since the defaults are used only when a protocol has no lists.
 
 
 ADDED
@@ -253,7 +266,5 @@ OPEN ITEMS
    the bug above. If the first set was played, they were about 2.9 dB below the requested
    levels. This could not be confirmed, because the code of that date was not examined.
 6. RP2.1 output carrying the trigger: to be taken from the old documentation.
-7. Display only: on-line axes are labeled msec and uV but are in s and V at the amplifier
-   output; Mode alternates between Finished and Running after a protocol ends.
-8. Sphinx reported 37 docstring formatting warnings in existing source on the last full
+7. Sphinx reported 37 docstring formatting warnings in existing source on the last full
    build, and about 321 of 572 functions and classes have no docstring.

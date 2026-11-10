@@ -293,12 +293,6 @@ class PyABR(QtCore.QObject):
                         case "Calibrate":
                             self.open_calibration()
 
-                case "Status":
-                    match path[1]:
-                        case "dBSPL":
-                            self.protocol["stimuli"]["default_spl"] = data
-                        case "Freq (kHz)":
-                            self.protocol["stimuli"]["default_frequency"] = data
         self.ptreedata.sigTreeStateChanged.disconnect(self.command_dispatcher)
         self.PR.update_protocol(ptreedata=self.ptreedata)
         self.protocol = self.PR.get_current_protocol()
@@ -425,6 +419,12 @@ class PyABR(QtCore.QObject):
         db: float = 0.0,
         fr: float = 0.0,
     ):
+        """Show the current stimulus in the Status group.
+
+        Bug: Freq (kHz) showed Hz, and command_dispatcher copied each displayed level
+        and frequency into the protocol's default_spl and default_frequency. The
+        frequency is now shown in kHz, and the Status group no longer alters the protocol.
+        """
         children = self.ptreedata.children()
         for child in children:
             if child.name() == "Status":
@@ -432,7 +432,7 @@ class PyABR(QtCore.QObject):
                     if wavetype in ["click", "tonepip"] and childs.name() == "dBSPL":
                         childs.setValue(f"{db:5.1f}")
                     if wavetype in ["tonepip"] and childs.name() == "Freq (kHz)":
-                        childs.setValue(f"{fr:8.1f}")
+                        childs.setValue(f"{fr / 1000.0:8.3f}")
                     if childs.name() == "Wave #":
                         childs.setValue(f"{wave_count+1:d} / {max_wave_count:d}")
                     if childs.name() == "Rep #":
