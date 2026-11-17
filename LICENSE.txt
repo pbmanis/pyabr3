@@ -1,4 +1,4 @@
-Copyright 2008-2025 Paul B. Manis, Ph.D.
+Copyright 2008-2026 Paul B. Manis, Ph.D.
 This work was developed with suppport from the following grants
 from the United States National Institutes of Health, National
 Institute on Deafness and Other Communication Disorders:
@@ -11,7 +11,7 @@ and is released under the following license:
 
 MIT License
 
-Copyright (c) [year] [fullname]
+Copyright (c) 2008-2026 Paul B. Manis, Ph.D.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

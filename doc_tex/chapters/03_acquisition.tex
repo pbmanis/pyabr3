@@ -1,0 +1,186 @@
+\chapter{Acquisition modes}
+\label{ch:acquisition}
+\index{acquisition}
+
+\section{Running a protocol}
+\label{sec:running}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+Button & Behaviour \\
+\midrule
+\gui{Test Acquisition} & Runs the \emph{complete} protocol with all of the displays.
+  Nothing is saved. Use the protocols with \file{\_test} in their names for a short
+  check. \\
+\gui{Start Acquisition} & The same, and each repetition is saved as it is recorded. \\
+\gui{Pause} & Holds after the current repetition. \\
+\gui{Resume} & Continues from where the protocol was paused. \\
+\gui{Stop} & Abandons the protocol. The attenuators return to maximum. Files that were
+  already written remain. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\index{Test Acquisition}\index{Start Acquisition}\index{Pause}\index{Stop}
+
+Several acquisitions can be run in one session.\index{repeated acquisitions} While a
+protocol is running or paused, \gui{Test Acquisition} and \gui{Start Acquisition} are
+refused with a message. Let the protocol finish, or press \gui{Stop}, before starting
+the next.
+
+\section{Stimulus types}
+\index{stimulus types}
+
+The \key{stimulustype} entry in the protocol file selects the type of stimulus.
+
+\begin{table}[htbp]
+\centering
+\caption{The protocols provided, with their approximate minimum running time if allowed
+to finish. The time counts only the waveforms and the pause after each one.}
+\label{tab:protocols}
+\begin{tabular}{@{}lllrr@{}}
+\toprule
+Protocol file & Type & Levels (dB SPL) & Freqs & Minutes \\
+\midrule
+\file{clickIO} & click & 90 to 10, 17 levels & -- & 7 \\
+\file{click\_test} & click & 94 & -- & 0.1 \\
+\file{tonepip} & tonepip & 0 to 90, 10 levels & 9 & 18 \\
+\file{tonepip\_test} & tonepip & 75, 94 & 1 & 0.4 \\
+\file{interleaved\_plateau} & interleaved\_plateau & 10 to 90, 9 levels & 7 & 6 \\
+\file{interleaved\_plateau\_high} & interleaved\_plateau & 60 to 90, 4 levels & 7 & 1.3 \\
+\file{interleaved\_plateau\_low} & interleaved\_plateau & 10 to 50, 5 levels & 7 & $<$0.1 \\
+\file{interleaved\_plateau\_test} & interleaved\_plateau & 30, 90 & 2 & 0.1 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{caution}
+\file{interleaved\_plateau\_low.cfg} currently has \key{nreps} set to 5. The intended
+value is 512. Correct the file before using this protocol.
+\end{caution}
+
+\begin{caution}
+\file{interleaved\_ramp.cfg} and \file{interleaved\_random.cfg} appear in the list, but
+these stimulus types are not in current use and are disabled in the waveform code. They
+may be enabled again in the future. Selecting one and starting an acquisition produces
+an ``Unrecognized wavetype'' error.
+\index{interleaved ramp}\index{interleaved random}
+\end{caution}
+
+\subsection{Clicks}
+\index{click}
+
+Each sweep is one waveform, \key{wave\_duration} seconds long. It holds \key{nstim}
+clicks, each lasting \key{stimulus\_duration}, spaced by \key{interval}. The first starts at
+\key{delay}~+~\key{interval}. If \key{alternate} is true, the clicks alternate in
+polarity.
+
+One waveform is used for all levels. The level is set only by the attenuator:
+
+\[
+\mathrm{attenuation} = \texttt{click\_reference\_dbspl} - \mathrm{requested\ level}
+\]
+
+\key{dblist} is the list of levels, in the order presented. \key{freqlist} is empty.
+
+\subsection{Tone pips}
+\index{tone pip}
+
+These are built like clicks, with \key{nstim} pips of \key{stimulus\_duration}, shaped by
+\key{stimulus\_risefall}. The frequencies are in \key{freqlist}. All levels of one
+frequency are presented before the next frequency begins.
+
+The attenuation is calculated from the calibration, with linear interpolation between
+calibrated frequencies:
+
+\[
+\mathrm{attenuation} = \mathrm{maxdB}(f) - \mathrm{requested\ level}
+\]
+
+Before anything is presented, the program checks that the calibration can reach every
+requested level (Section~\ref{sec:level-check}).
+
+\subsection{Interleaved plateau}
+\label{sec:interleaved}
+\index{interleaved plateau}
+
+All levels and frequencies are placed in one waveform, so that every combination is
+presented in every sweep, rather than in separate sweeps as for clicks and tone pips.
+\key{nreps} is therefore the number of sweeps for the whole protocol. Each pip starts \key{stimulus\_period} after the last one,
+beginning at \key{delay}. Within the waveform, all of the frequencies at the first level
+come first, then all of the frequencies at the second level, and so on.
+
+Each pip is scaled in the waveform according to the calibration. The whole waveform is
+then scaled to 10~V at its largest pip, and one attenuator setting applies to the whole
+sweep. The dynamic range of the output therefore limits the range of levels that can be
+combined in a protocol.
+
+\begin{caution}
+\textbf{Recordings with several interleaved sets.} Recordings that store more than one
+waveform set, such as those from December 2024, repeated \key{nreps} sweeps once for each
+set until stopped. The code at the time probably played them at levels below those
+requested, by the smallest attenuation stored in the file (about 2.9~dB for those
+recordings).
+\end{caution}
+
+The entries in the protocol file are used differently for this type:
+
+\begin{itemize}
+  \item \key{stimulus\_period} is the spacing of the pips.
+  \item \key{dblist} and \key{freqlist} are text, and may contain an expression such as
+        \texttt{"np.linspace(10.0, 90.0, 9)"}.
+  \item \key{wave\_duration}, \key{nstim} and \key{interval} are not used. The waveform
+        lasts as long as the pips require.
+  \item \key{alternate} has no effect: every sweep has the same polarity.
+\end{itemize}
+
+\section{Levels that cannot be reached}
+\label{sec:level-check}
+\index{Cannot reach}\index{negative attenuation}
+
+A level above the maximum for its frequency would need a negative attenuation. For
+tone pips and interleaved protocols the maximum comes from the calibration in use. The
+maximum for clicks is the entry \key{click\_reference\_dbspl} in the configuration
+file. When \gui{Test Acquisition} or
+\gui{Start Acquisition} is pressed, the program checks every level in the protocol. If
+any cannot be reached, a ``Cannot reach'' message lists them with the maximum for each
+frequency, nothing is presented and no folder is created. Reduce the maximum level or
+the range, and save the result as a new protocol.
+
+\section{Protocol entries}
+\label{sec:protocol-entries}
+\index{protocol entries}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+Entry & Meaning \\
+\midrule
+\key{stimulustype} & \texttt{click}, \texttt{tonepip} or \texttt{interleaved\_plateau} \\
+\key{wave\_duration} & Duration of one sweep, s (click and tone pip only) \\
+\key{stimulus\_duration} & Duration of each click or pip, s \\
+\key{stimulus\_risefall} & Rise and fall time of pips, s \\
+\key{nstim} & Stimuli per sweep (click and tone pip only) \\
+\key{delay} & Delay added to the stimulus start times, s \\
+\key{interval} & Spacing of stimuli within a sweep, s (click and tone pip only) \\
+\key{nreps} & Sweeps for each stimulus. For interleaved protocols, sweeps for the whole
+  protocol \\
+\key{stimulus\_period} & Pause after each sweep, s. For interleaved protocols it is also
+  the spacing of the pips \\
+\key{alternate} & Alternate the polarity within a sweep (click and tone pip only) \\
+\key{freqlist} & Frequencies, Hz \\
+\key{dblist} & Levels, dB SPL \\
+\key{default\_frequency}, \key{default\_spl} & Used only if the lists are absent \\
+\key{record\_dur}, \key{LPF} & Saved with the data, but have no effect on acquisition \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Recording}
+\index{recording length}\index{sample rate}
+
+The RP2.1 records at 24414.0625~Hz. The length of a record is that of the waveform,
+rounded up to a whole multiple of 1024 samples. Nothing is filtered during acquisition,
+beyond any filtering in the amplifier. Filtering for display is applied when viewing
+(Chapter~\ref{ch:viewing}).

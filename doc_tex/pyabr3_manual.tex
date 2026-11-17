@@ -1,0 +1,109 @@
+% pyabr3 user manual (draft)
+%
+% Build with:  make        (from this directory; the PDF is build/pyabr3_manual.pdf)
+%
+% Figures: each \figorplaceholder names a file in figures/, without the extension.
+% If the file is there (.png, .jpg or .pdf) it is used. If not, a box says what to
+% capture. figures_needed.md lists the figures that are still needed.
+%
+% Text that needs information from the lab is marked with \needsinput{...}.
+% Warnings about the current behaviour of the program use the caution environment;
+% remove each one when that behaviour has been changed.
+
+\documentclass[11pt,letterpaper]{report}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage[most]{tcolorbox}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,fit,backgrounds}
+\usepackage{imakeidx}
+\usepackage[hidelinks]{hyperref}
+
+\graphicspath{{figures/}}
+\makeindex[title=Index,intoc]
+
+\definecolor{uncblue}{HTML}{4B9CD3}
+\definecolor{needcolor}{HTML}{B3541E}
+\definecolor{cautioncolor}{HTML}{A61C1C}
+
+\setlist{itemsep=2pt,topsep=4pt}
+\setlength{\parskip}{5pt}
+\setlength{\parindent}{0pt}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  columns=fullflexible,
+  keepspaces=true,
+  frame=single,
+  rulecolor=\color{gray!50},
+  breaklines=true,
+  showstringspaces=false,
+}
+
+% names of things on the screen, and of files and keys
+\newcommand{\gui}[1]{\textsf{\textbf{#1}}}
+\newcommand{\file}[1]{\texttt{#1}}
+\newcommand{\key}[1]{\texttt{#1}}
+
+% information to be supplied by the lab
+\newcommand{\needsinput}[1]{%
+  \begin{tcolorbox}[colback=needcolor!8,colframe=needcolor,boxrule=0.5pt,arc=1pt,
+                    left=4pt,right=4pt,top=2pt,bottom=2pt]
+  \small\textbf{\textcolor{needcolor}{To be supplied:}} #1
+  \end{tcolorbox}}
+
+\newenvironment{caution}{%
+  \begin{tcolorbox}[colback=cautioncolor!6,colframe=cautioncolor,boxrule=0.5pt,arc=1pt,
+                    left=4pt,right=4pt,top=2pt,bottom=2pt]
+  \small\textbf{\textcolor{cautioncolor}{Caution.}}}{\end{tcolorbox}}
+
+% \figorplaceholder[width]{file}{caption}{what to capture}
+\newcommand{\figfound}[2]{\includegraphics[width=#1,keepaspectratio]{#2}}
+\newcommand{\figbox}[2]{%
+  \fbox{\parbox[c][1.5in][c]{0.8\textwidth}{\centering\small
+    \textbf{\textcolor{needcolor}{Figure needed:}} \texttt{figures/\detokenize{#1}}\\[4pt]#2}}}
+\newcommand{\figorplaceholder}[4][0.92\textwidth]{%
+  \begin{figure}[htbp]
+    \centering
+    \IfFileExists{figures/#2.png}{\figfound{#1}{#2.png}}{%
+      \IfFileExists{figures/#2.jpg}{\figfound{#1}{#2.jpg}}{%
+        \IfFileExists{figures/#2.pdf}{\figfound{#1}{#2.pdf}}{\figbox{#2}{#4}}}}
+    \caption{#3}
+    \label{fig:#2}
+  \end{figure}}
+
+\title{\textbf{pyabr3 User Manual}\\[6pt]
+       \large Auditory brainstem response acquisition, calibration and data viewing\\[6pt]
+       \large Draft for version 0.4.1}
+\author{Manis Laboratory}
+\date{November 2026}
+
+\begin{document}
+
+\pagenumbering{alph}
+\maketitle
+\pagenumbering{roman}
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
+
+\input{chapters/01_general}
+\input{chapters/02_calibration}
+\input{chapters/03_acquisition}
+\input{chapters/04_online_displays}
+\input{chapters/05_viewing_data}
+\input{chapters/06_wiring}
+
+\printindex
+
+\end{document}

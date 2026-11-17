@@ -1,0 +1,127 @@
+\chapter{Viewing past data}
+\label{ch:viewing}
+\index{data viewer}
+
+\section{Opening files}
+
+Press \gui{Load Data File} in the main window, or start the viewer by itself
+(Section~\ref{sec:main-window}). Then use \gui{Open File} in the viewer.
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+File type & What is opened \\
+\midrule
+\file{.p} & A pyabr3 recording. Opening any one trial loads the whole recording. \\
+\file{.txt} & A run from the MATLAB program, ABR4. Any file of the run may be chosen. \\
+\file{.pkl} & A threshold summary such as \file{all\_tone\_map\_data.pkl}, or a file of
+  numeric arrays. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{caution}
+\textbf{One recording per folder.} All of the \file{.p} files in a folder with the same
+date and stimulus type are treated as one recording. Keep each recording in its own
+folder (Section~\ref{sec:data-files}).
+\end{caution}
+
+The viewer is for checking data. Its averages match those of the analysis program, but
+it does not measure thresholds or wave amplitudes.
+
+\section{pyabr3 recordings}
+\index{recordings!viewing}
+
+The window has settings on the left, the plots on the right, and an \gui{Information}
+panel below (Figure~\ref{fig:viewer_clicks}). The \gui{Information} panel shows the
+subject data, protocol and calibration stored with the recording.
+
+\figorplaceholder{viewer_clicks}{A stored click recording. The upper plot shows the
+average at each level. The middle plot shows one sweep of the raw
+data.}{Data viewer with a click recording.}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+Setting & Effect \\
+\midrule
+\gui{High pass}, \gui{Low pass} & Filter corners in Hz; 0 turns a filter off. The
+  defaults are 300 and 3000~Hz. \\
+\gui{Frequency} & The tone frequency to display \\
+\gui{Interleaved set} & For interleaved recordings with more than one stimulus set,
+  which set to show \\
+\gui{Invert} & Inverts the polarity of the display \\
+\gui{Display} & Average only; average with standard deviation; or average with
+  individual traces \\
+\gui{Stimulus \#}, \gui{Repetition} & Selects the sweep in the \gui{Single trial} plot \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+The traces are filtered forward and backward with 4-pole Butterworth filters, so no
+phase shift is added. The responses are then interpolated to 100~kHz, and converted to
+microvolts at the electrodes assuming an amplifier gain of 10,000\index{amplifier gain}.
+The first millisecond of each response precedes the stimulus. For click and tone pip
+recordings, the responses to all of the stimuli in a sweep are averaged together.
+
+\index{standard deviation}
+\gui{Average with SD} shades one standard deviation around the mean
+(Figure~\ref{fig:viewer_clicks_sd}). \gui{Average with individual traces} draws up to
+100 traces at each level. The first use of either view calculates the single-trial
+responses, which takes a short time. The status field shows the progress.
+
+\figorplaceholder{viewer_clicks_sd}{The same recording, with the standard deviation
+shown at each level.}{Data viewer showing the average with SD.}
+
+Figure~\ref{fig:viewer_interleaved} shows an interleaved recording. The trace for each
+level and frequency is taken from its own part of the sweep.
+
+\figorplaceholder{viewer_interleaved}{An interleaved recording, showing the responses at
+16~kHz.}{Data viewer with an interleaved recording.}
+
+The \gui{Stimulus} plot normally says that the waveform is not stored, because later
+versions of the program do not save it.
+
+\section{MATLAB (ABR4) runs}
+\index{ABR4!viewing runs}\index{MATLAB runs}
+
+A run named \file{yyyymmdd-HHMM} consists of these text files:
+
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+File & Contents \\
+\midrule
+\file{<run>-SPL.txt} & Levels \\
+\file{<run>-kHz.txt} & Frequencies (tone runs only) \\
+\file{<run>-p.txt}, \file{<run>-n.txt} & Click responses for each polarity \\
+\file{<run>-p-<freq>.txt}, \file{<run>-n-<freq>.txt} & Tone responses for each polarity \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The \gui{MATLAB run} group lists all of the runs in the folder. The two polarities are
+averaged, the first 25~ms are shown, and the filter defaults are 500 and 2500~Hz.
+Individual traces are not stored in these files, so only averages can be shown.
+
+\figorplaceholder{viewer_matlab}{A run from the MATLAB program.}{Data viewer with a
+MATLAB ABR4 run open. No .txt runs were available in the repository when this draft was
+written.}
+
+\begin{caution}
+\index{sample rate!MATLAB runs} The sample rate of a MATLAB run is not stored in its
+files. \gui{Sample rate (Hz)} is set to 100~kHz, which is correct for recent recordings.
+Older recordings may have used 50~kHz. A wrong value changes the time axis and the
+effect of the filters.
+\end{caution}
+
+\section{Threshold summaries}
+\index{thresholds!summary files}
+
+A \file{.pkl} file containing frequencies and thresholds, as written by
+\file{read\_abr.py}, is plotted as in Figure~\ref{fig:viewer_thresholds}. Each group
+appears as a mean with symbols, and each subject as a faint line. Any other \file{.pkl}
+file containing numeric arrays has each array plotted.
+
+\figorplaceholder{viewer_thresholds}{A threshold summary from
+\file{all\_tone\_map\_data.pkl}.}{Data viewer showing a threshold summary.}

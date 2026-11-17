@@ -1,0 +1,241 @@
+\chapter{Calibration}
+\label{ch:calibration}
+\index{calibration}
+
+\section{Overview}
+\label{sec:cal-overview}
+
+Stimulus levels in pyabr3 depend on a speaker calibration file. The file holds, for each
+test frequency, the sound level that a full-scale (10~V) tone produces with no
+attenuation. Making this file is a three-stage procedure, with an optional fourth
+measurement:
+
+\begin{enumerate}
+  \item \textbf{Microphone:} measure the microphone's sensitivity using a sound level
+        calibrator.
+  \item \textbf{Speaker:} measure the sound level at each frequency at a fixed
+        attenuator setting.
+  \item \textbf{75~dB check:} use the new calibration to request 75~dB~SPL at every
+        frequency, and measure what is produced.
+  \item \textbf{Noise floor} (optional): record the microphone with no stimulus.
+\end{enumerate}
+
+\needsinput{How often the lab calibrates, and the criteria for accepting a calibration
+(for example, how far the 75~dB check may deviate from 75~dB, and at which
+frequencies).}
+
+\begin{caution}
+\textbf{Validation against MATLAB is not finished.}\index{validation}
+The calibration code is a port of the ABR4 MATLAB program. Its formulas reproduce
+stored MATLAB results, and it has been tested on simulated hardware. It has not yet
+been run on the rig or compared with MATLAB on the same recordings. Until that
+comparison has been made, compare new calibrations with recent MATLAB calibrations.
+\end{caution}
+
+\section{The calibration window}
+\index{calibration window}
+
+Press \gui{Calibrate} in the main window. During an acquisition, a message asks you to
+stop it first. The window title shows which hardware is in use.
+
+\begin{caution}
+If the RP2.1 is not connected, the window uses \textbf{simulated hardware} and the title
+says MOCK. Simulated results are written to a temporary folder, so they cannot replace a
+real calibration.
+\end{caution}
+
+\figorplaceholder{cal_speaker}{The calibration window after a speaker calibration. This
+example used the simulated hardware.}{Calibration window after a speaker run.}
+
+The panel on the left holds the settings:
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+Setting & Meaning \\
+\midrule
+\gui{Microphone} & The microphone in use (Table~\ref{tab:microphones}) \\
+\gui{Speaker} & The speaker in use. Choosing one fills in the next two settings and
+  \gui{Attn} (Table~\ref{tab:speakers}) \\
+\gui{Frequencies (kHz)} & Test frequencies, separated by commas or spaces \\
+\gui{Ref SPL (maxtones)} & Stored in the file \\
+\gui{Cal directory} & Where files are read and written. Defaults to the folder of
+  \key{calfile} in the configuration \\
+\gui{Test calc (no save)} & For microphone runs: use a synthetic signal, and do not
+  save \\
+\gui{Mic preamp gain (dB)} & The gain set by hand on the microphone preamplifier \\
+\gui{Speaker driver attn (dB)} & The setting on the speaker driver \\
+\gui{Attn (dB)} & The programmable attenuator setting for speaker runs \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{table}[htbp]
+\centering
+\caption{Speaker settings. The other names in the list use the settings of the same
+family.}
+\label{tab:speakers}
+\begin{tabular}{@{}llll@{}}
+\toprule
+Speaker & Frequencies & Attn & Ref SPL \\
+\midrule
+MF1 family & 41, from 1 to 87~kHz & 20~dB & 110 \\
+EC1, ES1 family & 28, from 1 to 64~kHz & 0~dB & 83.9 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Microphones, with the manufacturer's sensitivity. This is printed in the log so
+that it can be compared with each measurement.}
+\label{tab:microphones}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Microphone & Sensitivity (mV/Pa) & dB re 1 V/Pa \\
+\midrule
+7012\#39279 (1/2 inch) & 16.22 & $-35.8$ \\
+7016\#9945 (1/4 inch) & 3.55 & $-49.0$ \\
+7016\#10252 (1/4 inch) & 3.85 & $-48.3$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Before each run, a dialog lists the settings that the program cannot read from the
+hardware (Figure~\ref{fig:cal_verify_dialog}). Check them at the equipment, and answer
+\gui{Yes} only if they are correct. The values shown come from the panel on the left.
+
+\figorplaceholder[0.45\textwidth]{cal_verify_dialog}{The settings check shown before a
+speaker calibration.}{Settings confirmation dialog.}
+
+\section{Calibration procedure}
+\label{sec:cal-procedure}
+
+\subsection{Microphone}
+\index{microphone calibration}\index{calibrator}
+
+\needsinput{How the microphone is seated in the calibrator, and the calibrator model.}
+
+\begin{enumerate}
+  \item Place the microphone in the calibrator. Set the calibrator to 94~dB and turn it
+        on.
+  \item Select the \gui{Microphone}, and check \gui{Mic preamp gain (dB)}.
+  \item Press \gui{Microphone (94 dB)}, and confirm the settings.
+  \item Read the \gui{Log}. Compare the measured transfer factor with the manufacturer's
+        value printed above it.
+\end{enumerate}
+
+The program records 1~s with the attenuator at maximum. It finds the sensitivity from
+the signal in a 940--1020~Hz band. The result is saved as
+\file{microphone\_<name>.cal}.
+
+\begin{caution}
+\textbf{Use the 94~dB button.}\index{104 dB calibrator} After a calibration with
+\gui{Microphone (104 dB)}, speaker levels read 10~dB too high. The log prints a warning
+when this applies. This matches the MATLAB program, and will be corrected once
+validation is complete.
+\end{caution}
+
+\figorplaceholder{cal_microphone}{A microphone calibration, using the simulated
+hardware.}{Calibration window after a microphone run.}
+
+\subsection{Speaker}
+\index{speaker calibration}
+
+\needsinput{Speaker and microphone placement for calibration, including the distance
+between them and how this relates to the position of the animal.}
+
+\begin{enumerate}
+  \item Place the microphone at the position of the animal's ear.
+  \item Select the \gui{Speaker}. Check \gui{Mic preamp gain (dB)},
+        \gui{Speaker driver attn (dB)} and \gui{Attn (dB)}.
+  \item Press \gui{Calibrate Speaker}, and confirm the settings.
+\end{enumerate}
+
+The run takes at least one minute for the MF1 frequency list. The four plots update
+after each frequency. \gui{Stop} ends the run, and nothing is saved.
+
+The run is refused if the preamplifier gain differs from the gain in the microphone's
+calibration file. Measure the microphone again at the new gain, or restore the gain.
+
+At each frequency the program:
+
+\begin{enumerate}
+  \item plays a 0.5~s, 10~V tone with 5~ms rise and fall times, and records 0.75~s from
+        the microphone at 195~kHz;
+  \item repeats the recording with the attenuator at maximum, to measure the noise
+        floor;
+  \item removes power supply noise with notch filters at 19.5--20.5~kHz and
+        39--41~kHz\index{notch filters};
+  \item measures the level in the middle half of the tone (25\% to 75\% of the tone
+        duration), with a band-pass filter of $\pm$1/5 octave and with a cosinor fit.
+\end{enumerate}
+
+The level stored for use in stimuli, \key{maxdB}, is the band-pass measurement plus the
+attenuator setting. It estimates the level at 0~dB attenuation. A frequency inside a
+notch filter band produces a warning in the log, because the tone itself would be
+removed.
+
+\subsection{Check at 75 dB}
+\index{75 dB check}
+
+Leave the microphone and speaker in place, and press \gui{Check Speaker (75 dB)}. For
+each frequency the program sets the attenuator to give 75~dB~SPL according to the new
+calibration, then measures the result. A good calibration gives a flat line at 75~dB.
+Frequencies where the speaker cannot reach 75~dB use 0~dB attenuation, and fall below
+the line.
+
+\figorplaceholder{cal_check}{A 75~dB check, using the simulated hardware.}{Calibration
+window after a 75 dB check.}
+
+\subsection{Noise floor}
+\index{noise floor}
+
+\gui{Noise Floor} records 15~s from the microphone with the attenuator at maximum. The
+recording is saved as a text file, \file{Noise\_Measure\_<date and time>.csv}.
+
+\section{Choosing the calibration to use}
+\label{sec:cal-select}
+\index{Read Cal File}
+
+A new calibration is not used automatically. Press \gui{Read Cal File} in the main
+window, and select a file (Figure~\ref{fig:cal_chooser}). The list shows the current
+files and those in the \file{calibration\_history} folder, most recent first.
+\gui{Browse for File...} finds files in other folders.
+
+\figorplaceholder[0.6\textwidth]{cal_chooser}{The calibration file chooser.}{Calibration
+file chooser.}
+
+The chosen calibration is used for later stimuli and stored in the data files. If the
+file cannot be read, a message appears and the current calibration remains in use.
+Files in the older formats cannot be read.
+
+The \gui{Calibration} tab shows the selected calibration
+(Figure~\ref{fig:calibration_tab}). The upper plot shows the levels at the calibration
+attenuation, the estimated maximum level, and the noise floor. The lower plot shows the
+75~dB check. The check displayed is the first one made after the calibration on the same
+day. If there is none, the title of the lower plot says so.
+
+\figorplaceholder{calibration_tab}{The \gui{Calibration} tab, showing a stored
+calibration from December 2024 and its 75~dB check.}{Calibration tab of the main
+window.}
+
+\section{Calibration files}
+\index{calibration files}
+
+All of these are written to the \gui{Cal directory}. Each \file{.cal} file is a MATLAB
+file with the same layout as those written by ABR4. Each time one is written, a copy is
+placed in \file{calibration\_history/}, with the date and time in its name.
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+File & Contents \\
+\midrule
+\file{microphone\_<name>.cal} & Microphone sensitivity \\
+\file{frequency\_<speaker>.cal} & Speaker calibration \\
+\file{chk75db\_<speaker>.cal} & 75~dB check \\
+\file{Noise\_Measure\_<date and time>.csv} & Noise floor recording (no history copy) \\
+\bottomrule
+\end{tabularx}
+\end{center}

@@ -1,0 +1,45 @@
+\contentsline {chapter}{\numberline {1}General usage and description}{1}{chapter.1}%
+\contentsline {section}{\numberline {1.1}What pyabr3 does}{1}{section.1.1}%
+\contentsline {section}{\numberline {1.2}Example workflow}{1}{section.1.2}%
+\contentsline {section}{\numberline {1.3}Where the program can run}{1}{section.1.3}%
+\contentsline {section}{\numberline {1.4}Installing and starting}{3}{section.1.4}%
+\contentsline {section}{\numberline {1.5}The main window}{3}{section.1.5}%
+\contentsline {section}{\numberline {1.6}Example session: a click intensity series}{5}{section.1.6}%
+\contentsline {section}{\numberline {1.7}The configuration file}{5}{section.1.7}%
+\contentsline {section}{\numberline {1.8}Protocol files}{6}{section.1.8}%
+\contentsline {section}{\numberline {1.9}Data files}{6}{section.1.9}%
+\contentsline {chapter}{\numberline {2}Calibration}{8}{chapter.2}%
+\contentsline {section}{\numberline {2.1}Overview}{8}{section.2.1}%
+\contentsline {section}{\numberline {2.2}The calibration window}{8}{section.2.2}%
+\contentsline {section}{\numberline {2.3}Calibration procedure}{11}{section.2.3}%
+\contentsline {subsection}{\numberline {2.3.1}Microphone}{11}{subsection.2.3.1}%
+\contentsline {subsection}{\numberline {2.3.2}Speaker}{12}{subsection.2.3.2}%
+\contentsline {subsection}{\numberline {2.3.3}Check at 75 dB}{12}{subsection.2.3.3}%
+\contentsline {subsection}{\numberline {2.3.4}Noise floor}{12}{subsection.2.3.4}%
+\contentsline {section}{\numberline {2.4}Choosing the calibration to use}{12}{section.2.4}%
+\contentsline {section}{\numberline {2.5}Calibration files}{14}{section.2.5}%
+\contentsline {chapter}{\numberline {3}Acquisition modes}{16}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Running a protocol}{16}{section.3.1}%
+\contentsline {section}{\numberline {3.2}Stimulus types}{16}{section.3.2}%
+\contentsline {subsection}{\numberline {3.2.1}Clicks}{16}{subsection.3.2.1}%
+\contentsline {subsection}{\numberline {3.2.2}Tone pips}{17}{subsection.3.2.2}%
+\contentsline {subsection}{\numberline {3.2.3}Interleaved plateau}{17}{subsection.3.2.3}%
+\contentsline {section}{\numberline {3.3}Levels that cannot be reached}{18}{section.3.3}%
+\contentsline {section}{\numberline {3.4}Protocol entries}{18}{section.3.4}%
+\contentsline {section}{\numberline {3.5}Recording}{19}{section.3.5}%
+\contentsline {chapter}{\numberline {4}On-line displays}{20}{chapter.4}%
+\contentsline {section}{\numberline {4.1}The Recording tab}{20}{section.4.1}%
+\contentsline {section}{\numberline {4.2}Status group}{21}{section.4.2}%
+\contentsline {section}{\numberline {4.3}Other tabs}{21}{section.4.3}%
+\contentsline {chapter}{\numberline {5}Viewing past data}{22}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Opening files}{22}{section.5.1}%
+\contentsline {section}{\numberline {5.2}pyabr3 recordings}{22}{section.5.2}%
+\contentsline {section}{\numberline {5.3}MATLAB (ABR4) runs}{24}{section.5.3}%
+\contentsline {section}{\numberline {5.4}Threshold summaries}{26}{section.5.4}%
+\contentsline {chapter}{\numberline {6}Hardware wiring}{28}{chapter.6}%
+\contentsline {section}{\numberline {6.1}Equipment}{28}{section.6.1}%
+\contentsline {section}{\numberline {6.2}Signal paths}{28}{section.6.2}%
+\contentsline {section}{\numberline {6.3}Connections}{28}{section.6.3}%
+\contentsline {section}{\numberline {6.4}Sound delivery and recording setup}{31}{section.6.4}%
+\contentsline {section}{\numberline {6.5}Power-up and checks}{31}{section.6.5}%
+\contentsline {chapter}{Index}{33}{section*.2}%

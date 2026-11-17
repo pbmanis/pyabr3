@@ -1,0 +1,139 @@
+\chapter{Hardware wiring}
+\label{ch:wiring}
+\index{hardware}\index{wiring}
+
+This chapter is an outline. It records what the software requires of the hardware,
+taken from the code and from the names in the TDT circuit files. The physical
+connections have not been checked on the rig, and need to be written up by someone who
+has access to it.
+
+\section{Equipment}
+\index{equipment}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+Device & Role \\
+\midrule
+NI 6371\index{NI 6371} & Stimulus output at 500~kHz, $\pm$10~V, 16 bits \\
+TDT RP2.1\index{RP2.1} & Records the ABR and the microphone; generates the trigger \\
+TDT PA5\index{PA5} & Programmable attenuator, controlled over USB \\
+Speaker driver & Drives the speaker. The setting is confirmed by hand before
+  calibration \\
+Speaker & MF1, EC1 or ES1 family (Table~\ref{tab:speakers}) \\
+Microphone and preamplifier & Used for calibration (Table~\ref{tab:microphones}) \\
+Sound level calibrator & 94~dB at 1~kHz \\
+Biological amplifier & Amplifies the electrode signal, with a gain of 10,000 \\
+TDT RZ5D\index{RZ5D} & Not used in this configuration. It could be used for acquisition
+  if some software problems were resolved, but it cannot produce the output frequency
+  needed for tones above 90~kHz \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\needsinput{Exact models of the NI card, speaker driver, microphone preamplifier,
+calibrator and biological amplifier, with the amplifier's filter settings.}
+
+\section{Signal paths}
+\index{signal paths}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=6mm and 10mm,
+    dev/.style={draw=uncblue!80!black,fill=uncblue!12,rounded corners=2pt,thick,
+                minimum width=26mm,minimum height=10mm,align=center,font=\small},
+    ext/.style={dev,fill=gray!12,draw=gray!70},
+    sig/.style={-{Latex[length=2.5mm]},thick},
+    trg/.style={sig,dashed,draw=orange!70!black},
+    pin/.style={font=\scriptsize,midway,above}]
+  \node[dev] (rp) {TDT RP2.1};
+  \node[dev,right=30mm of rp] (ni) {NI card};
+  \node[dev,right=18mm of ni] (pa) {PA5};
+  \node[ext,below=12mm of pa] (drv) {Speaker\\driver};
+  \node[ext,left=18mm of drv] (spk) {Speaker};
+  \node[ext,left=18mm of spk] (animal) {Animal or\\microphone};
+  \node[ext,below=of animal] (amp) {Amplifier /\\mic preamp};
+  \draw[trg] (rp) -- node[pin]{trigger to PFI0} (ni);
+  \draw[sig] (ni) -- node[pin]{AO0} (pa);
+  \draw[sig] (pa) -- (drv);
+  \draw[sig] (drv) -- (spk);
+  \draw[sig] (spk) -- node[pin]{sound} (animal);
+  \draw[sig] (animal) -- (amp);
+  \draw[sig] (amp.west) -- ++(-20mm,0) |- node[pos=0.25,left,font=\scriptsize,align=right]{In1 (ABR)\\In2 (mic)} ($(rp.south west)!0.25!(rp.north west)$);
+\end{tikzpicture}
+\caption{Signal paths inferred from the software. The dashed line is the trigger.}
+\label{fig:signal-paths}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\caption{Connections and settings that the software depends on.}
+\label{tab:connections}
+\begin{tabularx}{\textwidth}{@{}lXl@{}}
+\toprule
+Item & Requirement & Status \\
+\midrule
+Stimulus output & NI analog output \texttt{ao0}, $\pm$10~V & From code \\
+Trigger & NI \texttt{PFI0}, rising edge, starts the stimulus. For ABR recording the
+  device name in this path is fixed as \texttt{Dev1} & From code \\
+Trigger source & A digital output of the RP2.1 (a BitOut block labeled ``NI Trigger Pulse
+  Generator'' in both circuits) & Port to verify \\
+ABR input & RP2.1 In1, stored in buffer \texttt{sampled\_wave}, at
+  24414.0625~Hz & Confirmed \\
+Microphone input & RP2.1 In2, read from \texttt{Data\_out2}, at
+  195312.5~Hz & Confirmed \\
+Attenuator & PA5 number 1, over USB. The rig has two PA5 units, but the code controls
+  only this one & From code \\
+RP2.1 connection & USB interface & From code \\
+Amplifier gain & 10,000. The software cannot read the gain from the amplifier, so the
+  data viewer uses this entered value & Confirmed \\
+Mic preamp gain & 20~dB by default; must match the microphone calibration & Verify \\
+Speaker driver & $-$6~dB by default & Verify \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\figorplaceholder{tdt_circuit_abr}{The RP2.1 circuit used for ABR recording,
+\file{tdt/abrs\_v2.rcx}.}{Export from RPvdsEx of tdt/abrs\_v2.rcx.}
+
+\figorplaceholder{tdt_circuit_mic}{The RP2.1 circuit used for calibration,
+\file{tdt/mic\_record.rcx}.}{Export from RPvdsEx of tdt/mic\_record.rcx.}
+
+\section{Connections}
+
+\needsinput{A cable-by-cable list: from, to, cable type and any labels. Include the
+RP2.1 output that carries the trigger, which is not certain from the software.}
+
+\figorplaceholder{hw_rack_front}{The equipment rack, front.}{Photograph of the front of
+the rack, with each device labeled.}
+
+\figorplaceholder{hw_rack_back}{The equipment rack, rear connections.}{Photograph of the
+rear connections, with the trigger, output and input cables identified.}
+
+\section{Sound delivery and recording setup}
+
+\needsinput{Speaker position relative to the animal, free-field or closed-field use,
+electrode positions and types, grounding, and steps taken to reduce electrical noise
+(for example, the heating pad). Include the switch settings to be used during
+recording.}
+
+\figorplaceholder{hw_speaker_setup}{Speaker and animal position.}{Photograph of the
+speaker and the animal (or a stand-in), showing distance and angle.}
+
+\figorplaceholder{hw_electrodes}{Electrode placement.}{Photograph or drawing of the
+electrode positions.}
+
+\figorplaceholder{hw_calibrator}{The microphone in the calibrator.}{Photograph of the
+microphone seated in the sound level calibrator.}
+
+\section{Power-up and checks}
+\index{power-up}
+
+\needsinput{The order in which equipment is switched on, and a short check that the
+sound path works before starting. The output stage can make noise if the attenuators
+are not at maximum.}
+
+\figorplaceholder[0.7\textwidth]{ni_max_device}{The NI device name in the NI-DAQmx
+utility, as used for \key{NI\_device}.}{Screen capture of NI MAX, showing the device
+name (Dev1).}

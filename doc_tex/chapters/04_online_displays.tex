@@ -1,0 +1,63 @@
+\chapter{On-line displays}
+\label{ch:online}
+\index{on-line displays}
+
+\section{The Recording tab}
+\index{Recording tab}
+
+The \gui{Recording} tab comes to the front when an acquisition starts
+(Figure~\ref{fig:online_recording}). The plots can be zoomed and panned with the mouse
+while a protocol runs, but they are reset by later updates.
+
+\figorplaceholder{online_recording}{The \gui{Recording} tab during a recording.}{Screen
+capture from the rig during a real recording, with a clear ABR in the Average panel
+(for example, clickIO at 80--90 dB SPL). Include the Status group.}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+Panel & Contents \\
+\midrule
+\gui{Raw ABR Signal} & The most recent sweeps, unfiltered, each in a different color.
+  Cleared after every 10 sweeps. \\
+\gui{Average ABR Signal} & The running average\index{running average}. For click and tone
+  pip protocols it starts again at each new stimulus, so it shows the current level and
+  frequency only. For interleaved protocols it covers the whole acquisition. \\
+\gui{Waveform} & The first stimulus waveform of the protocol, drawn once at the start.
+  It is shifted by 750~\textmu s, the measured delay of the output circuit. \\
+Lower left and right & Reserved for intensity functions and a response map. These plots
+  are not implemented and stay empty. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Time on all three plots is in milliseconds.\index{axis labels} The two response plots
+show microvolts at the electrodes, using the amplifier gain of 10,000. Saved data remain
+in volts at the amplifier output.
+
+\section{Status group}
+\index{Status group}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+Field & Meaning \\
+\midrule
+\gui{Devices} & Hardware that was found at startup \\
+\gui{Mode} & Waiting to start, Running, Paused, Finished, or No wave loaded \\
+\gui{dBSPL} & The current level (click and tone pip protocols) \\
+\gui{Freq (kHz)} & The current frequency (tone pip protocols) \\
+\gui{Wave \#} & The current stimulus, out of the total \\
+\gui{Rep \#} & The current repetition, out of \key{nreps} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+At the end of a protocol, \gui{Mode} shows Finished, and the next acquisition can be
+started.
+
+\section{Other tabs}
+
+\gui{Preview}\index{Preview tab} is empty in this version. \gui{Calibration}%
+\index{Calibration tab} shows the current calibration
+(Section~\ref{sec:cal-select}).

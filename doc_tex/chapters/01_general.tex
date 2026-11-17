@@ -1,0 +1,346 @@
+\chapter{General usage and description}
+\label{ch:general}
+
+\section{What pyabr3 does}
+
+pyabr3\index{pyabr3} records auditory brainstem responses\index{ABR}
+(ABRs). It presents clicks and tone pips through a National Instruments
+digital-to-analog converter and Tucker-Davis Technologies (TDT) attenuators,
+records the amplified scalp potential with a TDT RP2.1 processor, and shows the
+responses while the recording runs. Every repetition of every stimulus is saved in
+its own file.
+
+The program has three parts:
+
+\begin{itemize}
+  \item \textbf{Acquisition}, in the main window (Chapters~\ref{ch:acquisition}
+        and~\ref{ch:online}).
+  \item \textbf{Calibration} of the microphone and speaker, in its own window
+        (Chapter~\ref{ch:calibration}). This replaces the calibration part of the
+        MATLAB program, ABR4\index{ABR4}.
+  \item \textbf{A data viewer} for recordings made by pyabr3 or ABR4
+        (Chapter~\ref{ch:viewing}).
+\end{itemize}
+
+The data viewer is for checking recordings. Threshold measurement and other analysis
+are done with separate code, which this manual does not cover.
+
+\section{Example workflow}
+\index{workflow}
+
+Figure~\ref{fig:workflow} shows a typical recording day. The numbered steps in
+Section~\ref{sec:example-session} follow the same order.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=5mm and 9mm,
+    wfbox/.style={draw=uncblue!80!black,fill=uncblue!12,rounded corners=2pt,thick,
+                 minimum width=46mm,minimum height=10mm,align=center,font=\small},
+    decide/.style={wfbox,fill=orange!15,draw=orange!70!black},
+    flow/.style={-{Latex[length=2.5mm]},thick,draw=black!70},
+    lbl/.style={font=\scriptsize\sffamily\bfseries,text=black!60}]
+  % left column: preparation
+  \node[wfbox] (start) {Start pyabr3\\\footnotesize\texttt{uv run python main.py}};
+  \node[wfbox,below=of start] (mic) {Calibrate microphone\\\footnotesize 94~dB calibrator};
+  \node[wfbox,below=of mic] (spk) {Calibrate speaker};
+  \node[wfbox,below=of spk] (chk) {Check speaker at 75~dB};
+  \node[decide,below=of chk] (ok) {Check is flat at 75~dB?};
+  \node[wfbox,below=of ok] (read) {\gui{Read Cal File}\\\footnotesize select the new calibration};
+  % right column: recording
+  \node[wfbox,right=of start] (animal) {Prepare animal, place\\electrodes and speaker};
+  \node[wfbox,below=of animal] (subj) {Enter \gui{Subject Data}};
+  \node[wfbox,below=of subj] (proto) {Choose \gui{Protocol}};
+  \node[wfbox,below=of proto] (test) {\gui{Test Acquisition}\\\footnotesize nothing is saved};
+  \node[wfbox,below=of test] (run) {\gui{Start Acquisition}\\\footnotesize watch the displays};
+  \node[wfbox,below=of run] (file) {Data saved in a new\\serial-numbered folder};
+  \node[wfbox,below=of file] (view) {Review in the data viewer};
+  % arrows
+  \draw[flow] (start) -- (mic);
+  \draw[flow] (mic) -- (spk);
+  \draw[flow] (spk) -- (chk);
+  \draw[flow] (chk) -- (ok);
+  \draw[flow] (ok) -- node[right,font=\scriptsize]{yes} (read);
+  \draw[flow] (ok.west) -- ++(-5mm,0) node[left,font=\scriptsize,align=right]{no: find\\the problem}
+              |- (spk.west);
+  \draw[flow] (read.east) -- ++(4.5mm,0) |- (animal.west);
+  \draw[flow] (animal) -- (subj);
+  \draw[flow] (subj) -- (proto);
+  \draw[flow] (proto) -- (test);
+  \draw[flow] (test) -- (run);
+  \draw[flow] (run) -- (file);
+  \draw[flow] (file) -- (view);
+  \draw[flow] (file.east) -- ++(6mm,0) |- node[pos=0.25,right,font=\scriptsize,align=left]{next\\protocol} (proto.east);
+  % headings
+  \node[lbl,above=2mm of start] {SOUND SYSTEM};
+  \node[lbl,above=2mm of animal] {RECORDING};
+\end{tikzpicture}
+\caption{A typical recording day. Calibration is not repeated for every animal; see
+Section~\ref{sec:cal-overview}.}
+\label{fig:workflow}
+\end{figure}
+
+\section{Where the program can run}
+\index{Windows}\index{macOS}
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Task & Windows, with the rig hardware & macOS \\
+\midrule
+Acquisition & Yes & No \\
+Calibration & Yes & Simulated hardware only \\
+Viewing calibrations & Yes & Yes \\
+Data viewer & Yes & Yes \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Installing and starting}
+\index{installation}\index{starting the program}
+
+pyabr3 requires Python 3.13. Dependencies are managed with \file{uv}\index{uv}.
+On the rig computer, the NI-DAQmx\index{NI-DAQmx} driver and the TDT drivers must
+also be installed.
+
+Run these commands from the top directory of the repository. The program finds its
+configuration and protocols relative to the working directory, and will not start
+from anywhere else.
+
+\begin{lstlisting}
+uv sync                       # create or update the environment
+uv run python main.py         # start pyabr3
+uv run python main.py test    # start with config/abrs_test.cfg
+\end{lstlisting}
+
+Without an argument, \file{main.py} uses \file{config/abrs.cfg} on Windows and
+\file{config/abrs\_test.cfg} on other systems.
+
+The calibration window and the data viewer can also be started by themselves:
+
+\begin{lstlisting}
+uv run python -m src.calibration.calibration_gui          # on the rig
+uv run python -m src.calibration.calibration_gui --mock   # simulated hardware
+uv run python -m src.viewer.data_viewer [file]
+\end{lstlisting}
+
+Stand-alone applications are built with \file{build\_windows.sh} and
+\file{build\_macos.sh}\index{stand-alone application}.
+
+\begin{caution}
+The RP2.1 circuit is loaded from a fixed location,
+\file{c:\textbackslash users\textbackslash experimenters\textbackslash desktop\textbackslash pyabr\textbackslash tdt\textbackslash abrs\_v2.rcx}.
+The \key{rcx\_file} entry in the configuration file is not used. On a different
+installation path, the program stops with a ``file not found'' message.
+\end{caution}
+
+\section{The main window}
+\label{sec:main-window}
+\index{main window}
+
+The window has a column of parameters and controls on the left, and three tabs on the
+right: \gui{Recording}, \gui{Preview} and \gui{Calibration}
+(Figure~\ref{fig:main_window}). Chapter~\ref{ch:online} describes the tabs.
+
+\figorplaceholder{main_window}{The main window before a recording, with the
+\file{clickIO} protocol selected. This picture was taken on a computer with no
+acquisition hardware.}{Main window at startup.}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+Group & Use \\
+\midrule
+\gui{Protocol} & Selects the protocol file. The list is read when the program starts. \\
+\gui{Parameters} & Shows the values from the protocol file (see the caution below). \\
+\gui{Subject Data} & Subject ID, age, sex, weight, strain, genotype and treatment group.
+  These are saved with the data. \\
+\gui{Actions} & The buttons that run the program (Table~\ref{tab:actions}). \\
+\gui{Status} & Devices found, the current mode, and progress through the protocol. \\
+\gui{Quit} & Stops the presentation and closes the program. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{table}[htbp]
+\centering
+\caption{The \gui{Actions} group.}
+\label{tab:actions}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+Button & Action \\
+\midrule
+\gui{New Filename} & Has no effect on the names of saved files
+  (Section~\ref{sec:data-files}). \\
+\gui{Test Acquisition} & Presents the protocol and displays responses. Saves nothing. \\
+\gui{Start Acquisition} & Presents the protocol, displays responses, and saves them. \\
+\gui{Pause}, \gui{Resume} & Holds the presentation, and continues from the same place. \\
+\gui{Stop} & Ends the presentation. It cannot be resumed. \\
+\gui{Load Data File} & Opens the data viewer (Chapter~\ref{ch:viewing}). \\
+\gui{Read Cal File} & Chooses the speaker calibration to use
+  (Section~\ref{sec:cal-select}). \\
+\gui{Calibrate} & Opens the calibration window (Chapter~\ref{ch:calibration}). \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The \gui{Parameters} group\index{parameters!not editable} shows the values in the
+selected protocol file and cannot be edited, so that a protocol of a given name is the
+same from subject to subject. To use different values, save them as a new protocol file
+(Section~\ref{sec:protocol-files}).
+
+\gui{Start Acquisition} will not begin until a \gui{Subject ID}\index{Subject ID} has been
+entered. The ID becomes part of the data folder name, so it cannot contain any of the
+characters \verb+\ / : * ? " < > |+. \gui{Test Acquisition} saves nothing, and needs no
+ID. Recordings made before this requirement store the word ``testing'' as their ID.
+
+\section{Example session: a click intensity series}
+\label{sec:example-session}
+\index{example session}
+
+\begin{enumerate}
+  \item Turn on the hardware (Chapter~\ref{ch:wiring}) and start pyabr3. Check that
+        \gui{Status}~/~\gui{Devices} lists the NI card, the RP2.1 and the PA5.
+  \item If the sound system needs calibrating, follow
+        Section~\ref{sec:cal-procedure}.
+  \item Press \gui{Read Cal File} and select the calibration to use. Check its date
+        and shape in the \gui{Calibration} tab.
+  \item Prepare the animal, and place the electrodes and speaker.
+  \item Fill in \gui{Subject Data}, including the \gui{Subject ID}, and choose the
+        \gui{Data Path}.
+  \item Select \file{click\_test.cfg} in \gui{Protocol}, and press
+        \gui{Test Acquisition}. This presents 10 sweeps of clicks at 94~dB SPL. Check
+        for a clean response in the \gui{Recording} tab, then press \gui{Stop}.
+  \item Select \file{clickIO.cfg} and press \gui{Start Acquisition}. This protocol
+        runs 17 levels from 90 to 10~dB SPL and takes about 7 minutes.
+  \item The recording is complete when \gui{Status}~/~\gui{Mode} shows Finished.
+  \item Open one of the files with \gui{Load Data File} to review the recording.
+\end{enumerate}
+
+\section{The configuration file}
+\label{sec:config}
+\index{configuration file}
+
+The configuration files are in \file{config/}. The rig uses \file{abrs.cfg}.
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lXl@{}}
+\toprule
+Key & Meaning & Used? \\
+\midrule
+\key{required\_hardware} & Devices to connect: \texttt{NIDAQ}, \texttt{RP21},
+  \texttt{PA5} & Yes \\
+\key{NI\_device} & NI device name, from the NI-DAQmx utility & Yes \\
+\key{calfile} & Speaker calibration read at startup. Its folder is also where the
+  calibration window saves its files & Yes \\
+\key{click\_reference\_dbspl} & SPL of a click at 0~dB attenuation (105.1) & Yes \\
+\key{datapaths} & Named locations for saved recordings, one per line
+  (Section~\ref{sec:data-files}). A single \key{datapath} entry also works & Yes \\
+\key{rcx\_file} & RP2.1 circuit & No \\
+\key{NI\_samplerate} & NI output rate & No (fixed at 500~kHz) \\
+\key{RP21\_samplerate} & RP2.1 input rate & No (fixed at 24414.0625~Hz) \\
+\key{soundcard\_output\_samplerate} & Sound card rate & No \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Protocol files}
+\label{sec:protocol-files}
+\index{protocol files}
+
+Each file in \file{protocols/} with the extension \file{.cfg} is one protocol. To make
+a new one, copy an existing file, edit it, and restart the program. This is
+\file{clickIO.cfg}:
+
+\begin{lstlisting}
+# ABR Parameter file for click IO
+# All times in seconds, freq in Hz
+protocol:
+    protocolname: 'clickIO'
+    stimulustype: 'click'
+
+stimuli:
+    wave_duration: 1.2  # seconds
+    stimulus_duration: 1e-4  # seconds
+    stimulus_risefall: 5e-4  # seconds
+    nstim: 40
+    delay: 0.003 # seconds
+    interval: 25e-3  # between clicks
+    nreps: 20
+    default_frequency: 4000.0
+    default_spl: 80.0
+    stimulus_period: 1e-2
+    alternate: True
+    dblist: [90.0, 85.0, 80.0, ... 15.0, 10.0]
+    freqlist: []
+recording:
+    record_dur: 8e-3
+    LPF: 3000.0
+\end{lstlisting}
+
+Chapter~\ref{ch:acquisition} explains each entry for each type of stimulus. The
+\key{.toml} files in the same folder are not read by the program.
+
+\section{Data files}
+\label{sec:data-files}
+\index{data files}\index{file names}
+
+The \gui{Data Path}\index{Data Path} list holds the names in the \key{datapaths} entry
+of the configuration file. A person can have several names, for example one for each
+project. If there is more than one name, \gui{Start Acquisition} will not begin until
+one has been chosen:
+
+\begin{lstlisting}
+datapaths:
+    Reggie: "d:\\data\\reggie\\abr_data"
+    Paul_projectA: "c:\\users\\experimenters\\desktop\\pyabr\\abr_data"
+\end{lstlisting}
+
+Each press of \gui{Start Acquisition} creates a new folder below the chosen location
+(\file{<datapath>} below), and each repetition is written to one file in it:
+
+\begin{lstlisting}
+<datapath>/<date>-<Subject ID>_<serial>/<protocol>/<date>_<stimulus type>_<wave>_<repetition>.p
+<datapath>/2024-12-10-p572_000/clickIO/2024-12-10_click_000_001.p
+\end{lstlisting}
+
+\file{<serial>} is the first number, from 000, for which that subject and day does not
+already have a folder for the protocol. Different protocols on one subject therefore
+share \file{\_000}, and a repeat of a protocol goes to \file{\_001}. Nothing is
+overwritten.
+
+\file{<wave>} counts from 0 and identifies the stimulus in the protocol.
+\file{<repetition>} counts from 1. A file is a Python pickle\index{pickle} holding one
+dictionary:
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+Key & Contents \\
+\midrule
+\key{data} & The recorded trace, in volts at the amplifier output \\
+\key{record\_frequency} & A/D sample rate, Hz \\
+\key{subject\_data} & The \gui{Subject Data} fields \\
+\key{protocol} & The protocol as used \\
+\key{stimuli} & Levels, frequencies and attenuations of every stimulus. The waveforms
+  themselves are not stored \\
+\key{calibration} & The speaker calibration in use \\
+\key{wave\_number}, \key{repetition} & Position in the protocol \\
+\key{timestamp} & Time of writing \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\gui{New Filename}\index{overwriting data} has no effect on where data are saved.
+
+The folder arrangement below is the one that the analysis program \file{read\_abr.py}
+expects. Recordings must be copied into it by hand before that program can use them:
+
+\begin{lstlisting}
+experiment_directory/
+    CBA_M_N001_p48_NT/          # strain_sex_ID_age_...
+        Clicks/   Tones/   Interleaved_plateau/
+\end{lstlisting}
+
+\needsinput{The lab's standard folder convention, once decided. Older recordings use
+names chosen by each user, such as \file{2024-11-15-A/clicks}.}
