@@ -410,6 +410,10 @@ class DSPBuffer(AbstractRingBuffer):
 
 class ReadableDSPBuffer(DSPBuffer):
 
+    # Software wrap counter, used only when the circuit has no cycle tag.
+    _soft_write_cycle = 0
+    _last_write_index = None
+
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
         self.read_index = 0
@@ -423,11 +427,24 @@ class ReadableDSPBuffer(DSPBuffer):
     write_index = property(_get_write_index)
 
     def _get_write_cycle(self):
+        # Bug: circuits without a "<data_tag>_c" tag returned None here, and
+        # span() in abstract_ring_buffer.py then failed on None * buffer_size.
+        # Fix: count index wrap-arounds in software (reset in reset_read).
+        # Valid only if the buffer is polled at least once per buffer cycle.
         if self.cycle_tag is None:
-            return None
+            index = self.write_index
+            if self._last_write_index is not None and index < self._last_write_index:
+                self._soft_write_cycle += 1
+            self._last_write_index = index
+            return self._soft_write_cycle
         return int(self.circuit.get_tag(self.cycle_tag))
 
     write_cycle = property(_get_write_cycle)
+
+    def reset_read(self, index=None):
+        super().reset_read(index)
+        self._soft_write_cycle = 0
+        self._last_write_index = None
 
     def _read(self, offset, length):
         log.debug("%s: read offset %d, read size %d", self, offset, length)
