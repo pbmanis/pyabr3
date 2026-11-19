@@ -632,41 +632,63 @@ class PyABR(QtCore.QObject):
             index into which wave was played
         repetition_counter : _type_
             _description_
+
+        Return
+        ------
+            Success: Bool
+            True if data was acquired and displayed.
+            False if data was not propery acquired (need to repeat stimulus)
         """
+        self.update_success = False
         if chdata[0] is None:  # no data, so fake it
             rng = np.random.default_rng()
             chdata = [
                 rng.standard_normal(self.PS.Ndata) * 1e-6,
                 rng.standard_normal(self.PS.Ndata) * 1e-6,
             ]
-        self.ch1_data = np.array(chdata[0])
+        self.ch1_data = np.array(chdata[0]).squeeze()
+        if len(self.ch1_data) == 0:  # didn't get the data... 
+            print("Trial data is missing; retrying: ", self.TrialCounter, self.ch1_data.shape)
+            return False
         # self.ch2_data = np.array(ch2[0]).T
+        print("trial: ", self.TrialCounter, self.ch1_data.shape)
         if self.TrialCounter == 1:
             self.summed_buffer = self.ch1_data
             self.plot_ABR_Raw.clear()
 
         else:
+            # print("buffer shapes: ", self.ch1_data.shape, self.summed_buffer.shape)
+            if len(self.ch1_data) < len(self.summed_buffer):
+                n_extend = len(self.summed_buffer) - len(self.ch1_data)
+                # print("Lens: ", len(self.ch1_data), len(self.summed_buffer), n_extend)
+                self.ch1_data = np.append(self.ch1_data, np.mean(self.ch1_data) * np.ones(n_extend))
+                # print("Shape: ", self.ch1_data.shape, self.summed_buffer.shape)
+            elif len(self.ch1_data) > len(self.summed_buffer):  # longer
+                self.ch1_data = self.ch1_data[:len(self.summed_buffer)]
+            
             self.summed_buffer = self.summed_buffer + self.ch1_data
         
         _, self.sfin, self.sfout = self.PS.getHardware()
-        self.t_record = np.linspace(0, 1e3 * len(self.ch1_data) / self.sfin, self.ch1_data.shape[0])  # msec
+        self.t_record_ch1 = np.linspace(0, 1e3 * len(self.ch1_data) / self.sfin, self.ch1_data.shape[0])  # msec
         if (self.raw_clear_N > 0) and (((self.TrialCounter-1) % self.raw_clear_N) == 0):
             self.plot_ABR_Raw.clear()
-            self.plot_ABR_Raw.setXRange(0, np.max(self.t_record))
+            self.plot_ABR_Raw.setXRange(0, np.max(self.t_record_ch1))
 
-        self.plot_ABR_Raw.plot(self.t_record, self.ch1_data * ONLINE_UV_PER_VOLT, pen=pg.mkPen(pg.intColor(self.TrialCounter-1, hues=10, values=10)))
+        self.plot_ABR_Raw.plot(self.t_record_ch1, self.ch1_data * ONLINE_UV_PER_VOLT, pen=pg.mkPen(pg.intColor(self.TrialCounter-1, hues=10, values=10)))
         # self.plot_ABR_Raw.setYRange(-15, 15)
  
         self.plot_ABR_Average.clear()
+        self.t_record_sum = np.linspace(0, 1e3 * len(self.summed_buffer) / self.sfin, self.summed_buffer.shape[0])  # msec
         self.plot_ABR_Average.plot(
-            self.t_record,
+            self.t_record_sum,
             self.summed_buffer / float(self.TrialCounter) * ONLINE_UV_PER_VOLT,
             pen=pg.mkPen("g"),
         )
+        self.update_success = True
         self.TrialCounter += 1    
 
         if self.acq_mode == "test":
-            return
+            return True
         subject_data = {}
         children = self.ptreedata.children()
         for child in children:
@@ -698,6 +720,7 @@ class PyABR(QtCore.QObject):
         with open(fn, "wb") as fh:
             pickle.dump(out_data, fh, protocol=pickle.HIGHEST_PROTOCOL)
         del wave_copy    # delete the wave copy
+        return True
 
     def clear_average(self):
         """Start a new on-line average; called when a click or tone stimulus changes.

@@ -243,7 +243,7 @@ class PyStim:
                         raise ValueError("Unable to connect to device")
                     if self.setup_RP21(
                         # "c:\\TDT\\OpenEx\\MyProjects\\Tetrode\\RCOCircuits\\tone_search.rcx"
-                        "c:\\users\\experimenters\\desktop\\pyabr\\tdt\\abrs_v2.rcx",
+                        "c:\\users\\experimenters\\desktop\\pyabr3\\tdt_circuits\\abrs_v3.rcx",
                         acquisition_mode="abr",
                     ):
                         self.State.hardware.append("RP21")
@@ -252,7 +252,7 @@ class PyStim:
                         raise NotImplementedError("RP21 expected, but was not found")
                 # elif acquisition_mode == "calibrate":
                 #     if self.setup_RP21(
-                #         "c:\\Users\\experimenters\\Desktop\\pyabr\\tdt\\mic_record.rcx",
+                #         "c:\\Users\\experimenters\\Desktop\\pyabr3\\tdt_circuits\\mic_record.rcx",
                 #         acquisition_mode="calibrate"):
                 #         self.State.hardware.append("RP21")
                 #     else:
@@ -707,15 +707,15 @@ class PyStim:
             # now wait for the stimulus to be completed
             while not self.State.NIDAQ_task.is_task_done():
                 now_time = time.time()
-                if now_time - this_starttime > 2.0:
+                if (now_time - this_starttime) > 3.0:
                     failed = True
-                    print("arming nidaq/task execution FAILED")
+                    print("****** arming nidaq/task execution FAILED")
                     break
                 else:
-                    time.sleep(0.05)
+                    time.sleep(0.02)
 
-        self.ch1 = self.databuffer.read(None)
-        # print(self.ch1.shape)
+        self.ch1 = self.databuffer.read(None).squeeze()
+        print("load/arm: channel 1 data shape: ", self.ch1.shape)
         self.RP21_circuit.stop()
 
         self.State.NIDAQ_task = None
