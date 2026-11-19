@@ -36,7 +36,7 @@ uv run --locked --group build pyinstaller \
     --hidden-import pywintypes \
     --hidden-import win32com.client \
     --add-data nidaq:nidaq \
-    --add-data tdt/mic_record.rcx:tdt \
+    --add-data tdt_circuits/mic_record.rcx:tdt_circuits \
     main.py
 
 app_dir=dist/windows/PyABR3

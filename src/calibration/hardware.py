@@ -19,7 +19,7 @@ import numpy as np
 import scipy.signal
 from pylibrary.tools import cprint as CP
 
-MIC_RECORD_RCX = Path(__file__).parents[2] / "tdt" / "mic_record.rcx"
+MIC_RECORD_RCX = Path(__file__).parents[2] / "tdt_circuits" / "mic_record.rcx"
 RP21_COF_FLAG = 5  # 195312.5 Hz (hardware_initialization.m, rp_setup.m)
 RP21_CAL_SAMPLE_FREQ = 195312.5
 NI_CAL_SAMPLE_FREQ = 500000.0

@@ -9,7 +9,7 @@ else:
     proj = tdt.DSPProject(interface="USB")  # type: ignore
     pa5_1 = tdt.util.connect_pa5(interface="USB", device_id=1)  # type: ignore
     pa5_2 = tdt.util.connect_pa5(interface="USB", device_id=1)  # type: ignore
-    circuit = proj.load_circuit("tdt/abrs_v2.rcx", "RP2")
+    circuit = proj.load_circuit("tdt_circuits/abrs_v2.rcx", "RP2")
     circuit.start(0.25)
     proj.trigger('B', 'high')
     time.sleep(1)

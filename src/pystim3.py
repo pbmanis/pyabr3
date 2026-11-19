@@ -42,7 +42,8 @@ nidaqmx for Python (https://nidaqmx-python.readthedocs.io/en/latest/)
 pyaudio (https://people.csail.mit.edu/hubert/pyaudio/, or more recent versions; only for testing
 when other hardware is not available).
 TDT rco/rcx/rpx files for the TDT system. These are/were created with RPvdsEx, and should
-reside in the TDT directory of the repository. The .rco files are compiled versions of the
+reside in the tdt_circuits directory of the repository (not named "tdt", which would shadow the
+tdtpy package). The .rco files are compiled versions of the
 rcx files, and are used by the RP2.1 and RZ5D systems to control the hardware.
 
 """
