@@ -781,7 +781,7 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.15.0" },
     { name = "seaborn" },
     { name = "sounddevice", specifier = ">=0.5.2" },
-    { name = "tdtpy", marker = "sys_platform == 'win32'" },
+    { name = "tdtpy", marker = "sys_platform == 'win32'", editable = "tdtpy" },
 ]
 
 [package.metadata.requires-dev]
@@ -1264,17 +1264,25 @@ wheels = [
 [[package]]
 name = "tdtpy"
 version = "0.10.4"
-source = { registry = "https://pypi.org/simple" }
+source = { editable = "tdtpy" }
 dependencies = [
     { name = "numpy" },
     { name = "packaging" },
     { name = "pywin32" },
     { name = "setuptools" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/30/04/c2fea5632b9981393e46f49b8441ee08085ab8863f0c1f474ab4ef13c167/tdtpy-0.10.4.tar.gz", hash = "sha256:6d8eed0786fd2a7008b4e43dc764c3e8aa285212d96b8a1ab6b3cbe4a41e2574", size = 832971, upload-time = "2024-05-22T20:21:55.507Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/4d/63/9ef83e878a73edaef208e8bc4a26ced8105abf166ffdeb41c9d71a17b6d3/TDTPy-0.10.4-py3-none-any.whl", hash = "sha256:93a49cb9c6e4813d2f18a4406a132b0cfb8792b10090996cb97545f20a029189", size = 496741, upload-time = "2024-05-22T20:21:53.012Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "importlib-metadata", marker = "python_full_version < '3.8'" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "pytest", marker = "extra == 'test'" },
+    { name = "pywin32" },
+    { name = "setuptools", specifier = ">=65" },
+    { name = "sphinx", marker = "extra == 'docs'" },
 ]
+provides-extras = ["test", "docs"]
 
 [[package]]
 name = "threadpoolctl"
