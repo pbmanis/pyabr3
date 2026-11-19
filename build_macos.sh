@@ -6,6 +6,9 @@
 #
 # Requires uv. Run from any directory: ./build_macos.sh
 #
+# The user manual (Help menu) is copied from doc_tex/build/; build it first with
+# "make pdf" in doc_tex/.
+#
 # --paths . is needed because this directory contains an __init__.py, which otherwise
 # makes PyInstaller search for src/ from a higher level.
 set -euo pipefail
@@ -28,6 +31,7 @@ uv run --locked --group build pyinstaller \
     --add-data config:config \
     --add-data protocols:protocols \
     --add-data calfiles:calfiles \
+    --add-data doc_tex/build/pyabr3_manual.pdf:manual \
     main.py
 
 QT_QPA_PLATFORM=offscreen dist/macos/PyABR3.app/Contents/MacOS/PyABR3 --smoke-test

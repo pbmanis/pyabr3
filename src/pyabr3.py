@@ -46,6 +46,10 @@ THREAD_PERIOD = 20  # thread period, in msec
 
 ONLINE_UV_PER_VOLT = abr_files.VOLTS_TO_UV / abr_files.AMPLIFIER_GAIN  # uV at the electrodes
 
+# the user manual: in a build it is in manual/, when running from the source it is built by
+# "make pdf" in doc_tex/
+MANUAL_PATHS = [Path("manual", "pyabr3_manual.pdf"), Path("doc_tex", "build", "pyabr3_manual.pdf")]
+
 
 class PyABR(QtCore.QObject):
 
@@ -179,6 +183,10 @@ class PyABR(QtCore.QObject):
         self.dockArea.addDock(self.Dock_Calibration, "below", self.Dock_Preview)
         self.win.setWindowTitle("ABR Acquistion")
         self.win.setGeometry(100, 100, 1200, 1000)
+        help_menu = self.win.menuBar().addMenu("Help")
+        manual_action = help_menu.addAction("pyabr3 User Manual")
+        manual_action.setShortcut(QtGui.QKeySequence.StandardKey.HelpContents)
+        manual_action.triggered.connect(self.show_manual)
         # print(dir(self.dockArea))
         self.Dock_Params.raise_()
         self.ptree, self.ptreedata = build_parametertree(
@@ -320,6 +328,21 @@ class PyABR(QtCore.QObject):
         self.protocol["filename"] = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         self.ptreedata.child("Parameters").setValue(self.protocol)
         print("new file: ", self.protocol["filename"])
+
+    def show_manual(self):
+        """Open the user manual (PDF) in the system's PDF viewer."""
+        manual = next((p for p in MANUAL_PATHS if p.is_file()), None)
+        if manual is None:
+            MBox.MessageBox(
+                "The user manual was not found. Build it with 'make pdf' in doc_tex/.",
+                title="User Manual",
+            )
+            return
+        url = QtCore.QUrl.fromLocalFile(str(manual.resolve()))
+        if not QtGui.QDesktopServices.openUrl(url):
+            MBox.MessageBox(
+                f"Could not open the user manual:\n{manual.resolve()}", title="User Manual"
+            )
 
     def show_data_viewer(self):
         if self.data_viewer is None:
