@@ -1,0 +1,11 @@
+name: tdt
+channels:
+- conda-forge
+dependencies:
+- python>=3.7
+- pip
+- numpy
+- pywin32
+- packaging
+- setuptools
+- setuptools_scm

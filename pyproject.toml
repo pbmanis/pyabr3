@@ -64,6 +64,9 @@ testpaths = [
     ]
 
 
+[tool.uv.sources]
+tdtpy = { path = "tdtpy", editable = true }
+
 # [tool.uv.sources]
 # pylibrary = {git = "git+https://github.com/pbmanis/pylibrary.git" }
 # resampy = { git = "https://github.com/bmcfee/resampy.git", branch = "main" }

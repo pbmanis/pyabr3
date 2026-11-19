@@ -1,0 +1,26 @@
+# Version 0.7
+Initial release. Versions 0.7.1 ... 0.7.4 are mainly maintenance releases to fix documentation, build pipelines, and versioning issues.
+
+# Version 0.8.0
+Add support for continuous writes.
+
+# Version 0.8.1
+Fix some minor issues with the build process.
+
+# Version 0.9.0
+Add support for decimating data via the RPvdsEx circuit if the `dec_factor` tag is present.
+
+# Version 0.10.0
+Add support for detecting buffer underruns and overruns on the RPvdsEx circuit. 
+
+# Version 0.10.1
+Adds bugfix for check of index and cycle tags. Add AudioIn and AudioOut macros.
+
+# Version 0.10.2
+Fix bug where incorrect tag was being read to check buffer index in DSP.
+
+# Version 0.10.3
+Fix race condition when checking cycle and index tags in a multi-threaded environment.
+
+# Version 0.10.4
+Add support for the UZ3 interface. TDTpy should now auto-detect which interface is available and set the connection flag accordingly.
