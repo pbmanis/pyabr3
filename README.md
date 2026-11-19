@@ -9,7 +9,7 @@ Installation (Windows)
 
 Data acquisiton only works under windows.
 
-Install Python3.12 from the python.org site (don't use the Microsoft site)
+Install Python 3.13 from the python.org site (don't use the Microsoft site)
 Install TDT drivers from TDT (rpsvdx)
 Install NIDAQ-mx (even if you are not using it!)
 Install the active-x drivers from TDT. This may not be supported much longer however.
@@ -37,7 +37,12 @@ python tests/play_test_sounds.py pip
 
 To run pyabr3:
 
-`python pyabr3.py`
+From the repository root, run:
+
+`python main.py`
+
+Do not run `src/pyabr3.py` directly; `main.py` sets up the package import path and
+selects the platform-appropriate configuration.
 
 This will bring up a window with a panel on the left allowing access to parameters, loading protocols, recording, 
 and a set of docks on the right showing the recorded responses, with a running average. 
@@ -63,6 +68,8 @@ Activate the environment:
 ```
 source pyabr_venv/bin/activate
 ```
+
+To start the test-mode interface, run `python main.py test` from the repository root.
 
 Analysis
 --------
@@ -316,5 +323,3 @@ will need to be edited to point to the right files and to select what will be pl
             print("Subject: ", subj["subject"])
             export_for_abra(AR=AR, ABR4=ABR4, subj=subj, requested_stimulus_type=stim)
     '''
-
-

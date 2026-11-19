@@ -59,13 +59,13 @@ class PyABR(QtCore.QObject):
     signal_quit = pyqtSignal()
 
     def __init__(self, configtype: str = "abr"):
+        """Register shutdown only after success, so startup failures do not quit a partial object."""
         assert configtype in ["test", "abr"]
         if configtype == "test":
             configfilename = "config/abrs_test.cfg"
         else:
             configfilename = "config/abrs.cfg"
         self.QColor = QtGui.QColor
-        atexit.register(self.quit)
         # get the configuration file:
         self.config = configfile.readConfigFile(configfilename)
         self.PS = pystim3.PyStim(
@@ -125,6 +125,7 @@ class PyABR(QtCore.QObject):
 
         # note after building the GUI, everything is handled througn callbacks
         # in the command_dispatcher function.
+        atexit.register(self.quit)
 
     def read_protocol_directory(self):
         """read_protocol_directory Get the protocols from the protocols directory
@@ -738,6 +739,11 @@ class PyABR(QtCore.QObject):
             self.TrialTimer.start()
 
 
+def _default_config_type():
+    """Avoid the Windows lab calibration on macOS; mirror main.py's platform default."""
+    return "abr" if sys.platform == "win32" else "test"
+
+
 if __name__ == "__main__":
     import sys
     cmd = sys.argv[1:]
@@ -745,6 +751,6 @@ if __name__ == "__main__":
         print("cmd: ", cmd)
         prog = PyABR(cmd[0])
     else:
-        prog = PyABR()
+        prog = PyABR(_default_config_type())
     if (sys.flags.interactive != 1) or not hasattr(pg.QtCore, "PYQT_VERSION"):
         QtWidgets.QApplication.instance().exec()
