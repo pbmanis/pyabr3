@@ -75,6 +75,8 @@ import struct
 import time
 import numpy as np
 
+SWEEP_POLL_S = 0.005  # polling interval (s) while waiting for the RP2.1 sweep to fill
+
 # Check for the system we are running on, and what hardware/software is available.
 opsys = platform.system()
 nidaq_available = False
@@ -700,32 +702,83 @@ class PyStim:
                 self.databuffer = self.RP21_circuit.get_buffer("sampled_wave", "r")
 
                 self.RP21_circuit.start(0.25)  # start, but wait a bit...
-                self.ch1 = self.databuffer.acquire(
-                    self.Stimulus.RP21_TriggerSource, "running", False
-                )  # should not return until done
+                self.ch1 = self._acquire_sweep()  # None if the sweep was not captured
 
             # now wait for the stimulus to be completed
             while not self.State.NIDAQ_task.is_task_done():
                 now_time = time.time()
                 if (now_time - this_starttime) > 3.0:
-                    failed = True
                     print("****** arming nidaq/task execution FAILED")
                     break
                 else:
                     time.sleep(0.02)
 
-        self.ch1 = self.databuffer.read(None).squeeze()
-        print("load/arm: channel 1 data shape: ", self.ch1.shape)
-        self.RP21_circuit.stop()
+        if "RP21" in self.State.hardware:
+            self.RP21_circuit.stop()
 
         self.State.NIDAQ_task = None
 
         return True
 
-    def retrieveRP21_inputs(self):
-        if self.ch1 is None or self.ch1.shape[0] == 0:
-            self.ch1 = self.databuffer.read(None)
+    def _acquire_sweep(self) -> np.ndarray | None:
+        """
+        Trigger the RP2.1 and read exactly one sweep of acquisition_points samples.
 
+        Bug: load_and_arm used databuffer.acquire(trigger, "running", False), which ends
+        as soon as "running" reads 0 (possibly before the circuit has latched it, giving
+        no data), polls only every 0.1 s, and was followed by a second read(None) that
+        returned only the samples not yet consumed, so sweeps were empty or of varying
+        length. Now we wait (with a timeout) until acquisition_points samples are
+        pending, and read exactly that many. Returns None for a bad sweep; the caller
+        chain is retrieveRP21_inputs -> Presenter.retrieve_data/next_stimulus
+        (presenter_thread.py), which repeats the trial.
+
+        Diagnostics for each sweep are printed (running tag before/after the trigger,
+        poll count, time to completion, samples pending).
+        """
+        n = int(self.acquisition_points)
+        buf = self.databuffer
+        timeout = n / float(self.Stimulus.RP21_in_sampleFreq) * 1.5 + 0.5
+        buf.reset_read(0)
+        running_before = self.RP21_circuit.get_tag("running")
+        t0 = time.time()
+        self.RP21_circuit.trigger(self.Stimulus.RP21_TriggerSource)
+        running_after = self.RP21_circuit.get_tag("running")
+        done = False
+        pending = 0
+        n_polls = 0
+        while (time.time() - t0) < timeout:
+            n_polls += 1
+            try:
+                pending = buf.pending()
+            except ValueError as e:  # more than a buffer's worth: data were overwritten
+                print(f"****** sweep overrun: {e!s}")
+                break
+            if pending >= n:
+                done = True
+                break
+            time.sleep(SWEEP_POLL_S)
+        print(
+            f"sweep: running {running_before}->{running_after}, polls={n_polls:d}, "
+            f"t={time.time() - t0:.3f} s, pending={pending:d}/{n:d}, "
+            f"write_index={buf.write_index}, done={done}"
+        )
+        if not done:
+            print("****** sweep not captured: timeout or overrun")
+            return None
+        data = np.asarray(buf.read(n)).squeeze()
+        if data.ndim != 1 or data.shape[0] != n:
+            print(f"****** sweep has wrong shape: {data.shape}, expected ({n:d},)")
+            return None
+        return data
+
+    def retrieveRP21_inputs(self) -> tuple | None:
+        """
+        Return (ch1, ch2) for the sweep just acquired, or None if the sweep
+        is missing or not acquisition_points long (the trial must be repeated).
+        """
+        if self.ch1 is None or self.ch1.shape[0] != self.acquisition_points:
+            return None
         self.ch2 = np.zeros_like(self.ch1)
         return (self.ch1, self.ch2)
 

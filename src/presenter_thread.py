@@ -14,6 +14,7 @@ from src import sound as sound  # for waveform generation
 
 
 THREAD_PERIOD = 20  # thread period, in msec
+MAX_RETRIES = 3  # repeats of a trial when the sweep is not read properly
 
 MAX_CLICK = 105.1  # SPL for maximum click
 
@@ -122,12 +123,26 @@ class Presenter(QObject):  # (QtCore.QRunnable):
                 self.next_stimulus()
                 time.sleep(self.protocol["stimuli"]["stimulus_period"])
 
-    def retrieve_data(self):
+    def retrieve_data(self) -> bool:
+        """
+        Get the sweep from the hardware and send it to the main program.
+
+        Bug: empty or short sweeps were passed on to update_ABR, whose return value is
+        lost (queued signal), so they could not be repeated. A bad sweep (None from
+        pystim3.retrieveRP21_inputs) is now not emitted; we return False so the caller
+        can repeat the trial.
+
+        Return
+        ------
+            True if good data were emitted, False if the trial must be repeated.
+        """
         res = self.sound_class.retrieveRP21_inputs()
-        # print("presenter retrieve: ", res[0].shape)
+        if res is None:
+            print("Presenter: bad sweep from RP2.1, not sent")
+            return False
         self.chdata = np.array(res)
-        # self.ch2_data = np.array(res)
         self.signal_data_ready.emit(self.chdata, self.wave_counter, self.repetition_counter)
+        return True
 
     def next_stimulus(self):
         """
@@ -171,8 +186,29 @@ class Presenter(QObject):  # (QtCore.QRunnable):
             self.wavekeys[self.wave_counter][1],
             sec_key,
         )
-       
+        for attempt in range(MAX_RETRIES + 1):
+            if self._present_once():
+                return
+            print(
+                f"Presenter: wave {self.wave_counter:d}, rep {self.repetition_counter:d}: "
+                + f"bad sweep, attempt {attempt + 1:d}/{MAX_RETRIES + 1:d}"
+            )
+        print("Presenter: too many bad sweeps; trial skipped")
+        self.signal_mode_status.emit("Trial skipped: no data from RP2.1")
 
+    def _present_once(self) -> bool:
+        """
+        Present the current stimulus once and retrieve the response.
+
+        Bug: a sweep that was not read properly was still counted as a trial, so
+        fewer good trials were acquired than specified. next_stimulus now repeats the
+        presentation (up to MAX_RETRIES) until this returns True, and the data are
+        only emitted for good sweeps (see retrieve_data, and pystim3._acquire_sweep).
+
+        Return
+        ------
+            True if good data were acquired and emitted, False if the trial must be repeated.
+        """
         if self.wavetype in ["click", "tonepip"]:
             """
             present clicks and tone pips. Here, we use multiple waveforms in the array
@@ -185,7 +221,7 @@ class Presenter(QObject):  # (QtCore.QRunnable):
                 self.signal_finished.emit()
                 self._finished = True
                 self._running = False
-                return
+                return True
             wave = self.wave_matrix[self.wavekeys[self.wave_counter]]["sound"]
             attn = self.wave_matrix[self.wavekeys[self.wave_counter]]["attenuation"][0]
 
@@ -194,7 +230,7 @@ class Presenter(QObject):  # (QtCore.QRunnable):
                 wave,
                 attns=[attn, attn],  # set both attenuators
             )
-            self.retrieve_data()
+            return self.retrieve_data()
 
         else:  # all other stimuli.
             """
@@ -215,9 +251,7 @@ class Presenter(QObject):  # (QtCore.QRunnable):
             self.sound_class.play_sound(
                 wave, wave,attns=[attn, attn]
             )
-            self.retrieve_data()
-
-        return
+            return self.retrieve_data()
 
     @pyqtSlot()
     def setWaveforms(self, wave: dict, protocol: dict, sound_presentation_class: object):
