@@ -68,6 +68,7 @@ testpaths = [
     "tests/test_bic_acquisition.py",
     "tests/test_bic_viewer.py",
     "tests/test_binaural_gui.py",
+    "tests/test_acquire_sweep.py",
     ]
 
 

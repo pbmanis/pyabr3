@@ -76,6 +76,7 @@ import time
 import numpy as np
 
 SWEEP_POLL_S = 0.005  # polling interval (s) while waiting for the RP2.1 sweep to fill
+DATA_READY_SETTLE_S = 0.002  # wait (s) after data_ready for the last samples to be stored
 
 # Check for the system we are running on, and what hardware/software is available.
 opsys = platform.system()
@@ -758,6 +759,21 @@ class PyStim:
 
         return True
 
+    _data_ready_ok: bool | None = None  # does the circuit have data_ready and compare_count?
+
+    def _has_data_ready(self) -> bool:
+        """True if the circuit has the "data_ready" and "compare_count" tags (abrs_v3.rcx
+        with the latched sweep-done flag). Circuits without them are read by the buffer index."""
+        if self._data_ready_ok is None:
+            try:
+                self.RP21_circuit.get_tag("data_ready")
+                self.RP21_circuit.get_tag("compare_count")
+                self._data_ready_ok = True
+            except Exception:
+                self._data_ready_ok = False
+                print("data_ready/compare_count not in the circuit; waiting on the buffer index")
+        return self._data_ready_ok
+
     def _acquire_sweep(self) -> np.ndarray | None:
         """
         Trigger the RP2.1 and read exactly one sweep of acquisition_points samples.
@@ -773,38 +789,68 @@ class PyStim:
 
         Diagnostics for each sweep are printed (running tag before/after the trigger,
         poll count, time to completion, samples pending).
+
+        If the circuit has the latched "data_ready" flag (set by the iCompare of the buffer
+        index against "compare_count"; reset by the start trigger), the sweep is complete
+        when it is set, which cannot be missed the way the wrapping index can. Otherwise
+        the buffer index is polled, as before.
         """
         n = int(self.acquisition_points)
         buf = self.databuffer
         timeout = n / float(self.Stimulus.RP21_in_sampleFreq) * 1.5 + 0.5
+        use_flag = self._has_data_ready()
+        if use_flag:
+            # data_ready is set when the buffer index reaches compare_count. The index tag
+            # is in raw units (samples * channels / compression); the last index is
+            # raw_n - 1, which works with an EQ or a GE test in the circuit.
+            raw_n = int(round(n * getattr(buf, "channels", 1) / getattr(buf, "compression", 1)))
+            self.RP21_circuit.set_tag("compare_count", raw_n - 1)
         buf.reset_read(0)
         running_before = self.RP21_circuit.get_tag("running")
         t0 = time.time()
-        self.RP21_circuit.trigger(self.Stimulus.RP21_TriggerSource)
+        self.RP21_circuit.trigger(self.Stimulus.RP21_TriggerSource)  # also resets data_ready
         running_after = self.RP21_circuit.get_tag("running")
+        ready_after = None
+        if use_flag:
+            ready_after = bool(self.RP21_circuit.get_tag("data_ready"))
+            if ready_after:  # the trigger did not clear it, so it says nothing about this sweep
+                print("****** data_ready is still set after the trigger; using the buffer index")
+                use_flag = False
         done = False
         pending = 0
         n_polls = 0
         while (time.time() - t0) < timeout:
             n_polls += 1
-            try:
-                pending = buf.pending()
-            except ValueError as e:  # more than a buffer's worth: data were overwritten
-                print(f"****** sweep overrun: {e!s}")
-                break
-            if pending >= n:
-                done = True
-                break
+            if use_flag:
+                if self.RP21_circuit.get_tag("data_ready"):
+                    done = True
+                    break
+            else:
+                try:
+                    pending = buf.pending()
+                except ValueError as e:  # more than a buffer's worth: data were overwritten
+                    print(f"****** sweep overrun: {e!s}")
+                    break
+                if pending >= n:
+                    done = True
+                    break
             time.sleep(SWEEP_POLL_S)
         print(
-            f"sweep: running {running_before}->{running_after}, polls={n_polls:d}, "
+            f"sweep: running {running_before}->{running_after}, data_ready after trigger "
+            f"{ready_after}, by {'flag' if use_flag else 'index'}, polls={n_polls:d}, "
             f"t={time.time() - t0:.3f} s, pending={pending:d}/{n:d}, "
             f"write_index={buf.write_index}, done={done}"
         )
         if not done:
             print("****** sweep not captured: timeout or overrun")
             return None
-        data = np.asarray(buf.read(n)).squeeze()
+        if use_flag:
+            # the flag is set as the last index is reached: let the last samples be stored,
+            # then read the n samples from the start of the buffer, without the wrap counting
+            time.sleep(DATA_READY_SETTLE_S)
+            data = np.asarray(buf._read(0, n)).squeeze()
+        else:
+            data = np.asarray(buf.read(n)).squeeze()
         if data.ndim != 1 or data.shape[0] != n:
             print(f"****** sweep has wrong shape: {data.shape}, expected ({n:d},)")
             return None

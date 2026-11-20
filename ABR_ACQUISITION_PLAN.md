@@ -95,3 +95,16 @@ Run a block of trials and keep the console output. Look at the `sweep:` lines, i
 - A SerSource is the PC-to-circuit playback side.
 - The `.rcx` can't be read here, so check in RPvds which one holds `sampled_wave`.
 - The vendored reader computes `write_index = index_tag * compression / channels`. If the SerStore uses compression or multiple channels, the iCompare threshold has to use the raw index units.
+
+## Update: the latched data_ready flag (step 5, circuit change) is used by the software
+`abrs_v3.rcx` now has `compare_count` (the value the iCompare compares the buffer index with) and `data_ready` (the JK flip-flop output, set when the comparison is true and reset by the edge-detected zBusB start trigger). The buffer is a SerStore. `PyStim._acquire_sweep` (pystim3.py) uses them when the circuit has both tags:
+- Before the trigger it sets `compare_count` to the last raw index, `n * channels / compression - 1`. This works with an EQ or a GE test, so the test type does not have to be changed. (A GE test is the more tolerant of the two; with EQ the index must pass through exactly that value.)
+- It fires the start trigger (`RP21_TriggerSource`, "B"), which also resets `data_ready`, and reads `data_ready` once straight away. If it is still set, the trigger did not clear it, so this sweep is read by the buffer index instead (a message is printed).
+- The sweep is complete when `data_ready` is set (polled every 5 ms, with the same timeout as before). After a 2 ms settle (`DATA_READY_SETTLE_S`) for the last samples to be stored, the n samples are read from the start of the buffer (`buf._read(0, n)`), without the wrap counting of `pending()`.
+- A circuit without the tags is read by the buffer index, as before.
+- The `sweep:` line now also shows the value of `data_ready` after the trigger and whether the sweep was completed by the flag or the index.
+
+Things to check on the rig:
+- That `data_ready` reads 0 just after the trigger. If the circuit is stopped and restarted for each trial, the flip-flop should be clear at the start anyway.
+- That the index the iCompare sees is the SerStore index in raw units. If it is not, `compare_count` will not match. The sweep would then time out, and the `sweep:` line would show it.
+- If the last sample of a sweep looks wrong, increase `DATA_READY_SETTLE_S`.
