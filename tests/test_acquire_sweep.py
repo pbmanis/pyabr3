@@ -1,7 +1,10 @@
 """
-Tests for PyStim._acquire_sweep, with a fake RP2.1 circuit and buffer on a simulated
-clock: the latched data_ready flag (iCompare of the buffer index against compare_count,
-reset by the start trigger), and the buffer-index fallback for circuits without it.
+Tests for PyStim._acquire_sweep and the circuit check, with a fake RP2.1 circuit and
+buffer on a simulated clock: the latched data_ready flag (iCompare of the buffer index
+against compare_count, into a JK flip-flop that the start trigger resets).
+
+There is no fallback: a circuit without the tags, or a flag that the start trigger does
+not clear, is a CircuitError.
 
 Run from the top directory of the repository:
     python -m pytest --confcutdir=tests tests/test_acquire_sweep.py
@@ -11,12 +14,14 @@ import os
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 REPO = Path(__file__).parents[1]
 sys.path.insert(0, str(REPO))
 
 import numpy as np
+import pyqtgraph as pg
 import pytest
 
 from src import pystim3
@@ -26,27 +31,30 @@ RATE = 1e5  # A/D rate, so a sweep takes about 10 ms
 
 
 class FakeCircuit:
-    """data_ready goes high when the sweep has been recorded, and is cleared by the trigger."""
+    """data_ready is high once a sweep has been recorded. A trigger named in reset_by
+    clears it (the circuit's reset); stuck means that nothing clears it."""
 
-    def __init__(self, tags=("running", "data_ready", "compare_count"), stale_ready=False, never=False):
+    def __init__(self, reset_by=("B",), stuck=False, never=False, tags=("data_ready", "compare_count")):
         self.tags = {t: 0 for t in tags}
-        self.stale_ready = stale_ready
+        self.reset_by = reset_by
+        self.stuck = stuck
         self.never = never
-        self.t_trigger = None
+        self.t_sweep = None  # start of the sweep being recorded
+        self.flag = False  # the latched flag, as left by the previous sweep
         self.triggers = []
         self.set_calls = []
 
     def elapsed(self):
-        return None if self.t_trigger is None else time.time() - self.t_trigger
+        return None if self.t_sweep is None else time.time() - self.t_sweep
 
     def get_tag(self, name):
         if name not in self.tags:
             raise KeyError(name)
-        done = self.elapsed() is not None and self.elapsed() >= N / RATE and not self.never
         if name == "data_ready":
-            return 1 if (done or self.stale_ready) else 0
-        if name == "running":
-            return 1 if (self.elapsed() is not None and not done) else 0
+            elapsed = self.elapsed()
+            if elapsed is not None and elapsed >= N / RATE and not self.never:
+                self.flag = True
+            return 1 if self.flag else 0
         return self.tags[name]
 
     def set_tag(self, name, value):
@@ -56,8 +64,11 @@ class FakeCircuit:
         self.set_calls.append((name, value))
 
     def trigger(self, name):
-        self.t_trigger = time.time()
         self.triggers.append(name)
+        if name in self.reset_by and not self.stuck:
+            self.flag = False
+        if name == "B":  # the start trigger: the sweep begins
+            self.t_sweep = time.time()
 
 
 class FakeBuffer:
@@ -66,39 +77,26 @@ class FakeBuffer:
         self.channels = channels
         self.compression = compression
         self.calls = []
-        self.pending_calls = 0
         self.data = 1.0 + np.arange(N)
 
     def reset_read(self, index):
         self.calls.append(("reset_read", index))
 
-    def _stored(self):
-        elapsed = self.circuit.elapsed()
-        return 0 if elapsed is None or self.circuit.never else min(N, int(elapsed * RATE))
-
-    def pending(self):
-        self.pending_calls += 1
-        return self._stored()
-
     @property
     def write_index(self):
-        return self._stored()
-
-    def read(self, n):
-        self.calls.append(("read", n))
-        if n > self._stored():
-            raise IOError("not enough samples")
-        return self.data[np.newaxis, :n]
+        elapsed = self.circuit.elapsed()
+        return 0 if elapsed is None else min(N, int(elapsed * RATE))
 
     def _read(self, offset, length):
         self.calls.append(("_read", offset, length))
         return self.data[np.newaxis, offset : offset + length]
 
 
-def make_ps(circuit, channels=1, compression=1):
+def make_ps(circuit, channels=1, compression=1, reset_trigger=None):
     ps = pystim3.PyStim.__new__(pystim3.PyStim)
     ps.Stimulus = pystim3.Stimulus_Parameters()
     ps.Stimulus.RP21_in_sampleFreq = RATE
+    ps.Stimulus.RP21_ResetTrigger = reset_trigger
     ps.acquisition_points = N
     ps.RP21_circuit = circuit
     ps.databuffer = FakeBuffer(circuit, channels, compression)
@@ -113,7 +111,14 @@ def test_data_ready_ends_the_sweep_and_the_data_are_read_from_the_start():
     assert circuit.set_calls == [("compare_count", N - 1)]  # the last index of the buffer
     assert circuit.triggers == [ps.Stimulus.RP21_TriggerSource]
     assert ps.databuffer.calls == [("reset_read", 0), ("_read", 0, N)]
-    assert ps.databuffer.pending_calls == 0  # the wrapping index was not used
+
+
+def test_a_following_sweep_works_after_the_flag_was_set_by_the_last_one():
+    circuit = FakeCircuit()
+    ps = make_ps(circuit)
+    assert ps._acquire_sweep() is not None  # leaves data_ready set
+    assert circuit.flag
+    assert ps._acquire_sweep() is not None  # the start trigger clears it, so it can be waited for
 
 
 def test_compare_count_is_in_raw_index_units():
@@ -133,38 +138,133 @@ def test_compare_count_is_set_before_the_trigger():
     assert order == ["set", "trigger"]
 
 
-def test_a_flag_that_the_trigger_did_not_clear_is_not_trusted(capsys):
-    circuit = FakeCircuit(stale_ready=True)
+def test_a_flag_that_the_start_trigger_does_not_clear_is_an_error():
+    circuit = FakeCircuit(stuck=True)
+    circuit.flag = True  # left set by the last sweep, as on the rig
     ps = make_ps(circuit)
-    data = ps._acquire_sweep()  # falls back to the buffer index, which has the whole sweep
-    assert data is not None and len(data) == N
-    assert ("read", N) in ps.databuffer.calls
-    assert ps.databuffer.pending_calls > 0
-    assert "still set after the trigger" in capsys.readouterr().out
+    with pytest.raises(pystim3.CircuitError, match="still set just after the start trigger") as e:
+        ps._acquire_sweep()
+    assert "before the trigger: True" in str(e.value)
+    assert ps.databuffer.calls == [("reset_read", 0)]  # nothing was read
 
 
-def test_circuit_without_the_tags_is_read_by_the_buffer_index(capsys):
-    circuit = FakeCircuit(tags=("running",))
+def test_an_error_names_what_was_seen_when_the_flag_was_clear_before_the_trigger():
+    circuit = FakeCircuit()
+    circuit.trigger = lambda name: circuit.triggers.append(name) or setattr(circuit, "flag", True)  # the trigger sets it
     ps = make_ps(circuit)
+    with pytest.raises(pystim3.CircuitError, match="before the trigger: False"):
+        ps._acquire_sweep()
+
+
+def test_a_reset_trigger_is_fired_first_and_checked():
+    circuit = FakeCircuit(reset_by=("A",))  # the start trigger does not reset; trigger A does
+    circuit.flag = True
+    ps = make_ps(circuit, reset_trigger="A")
     data = ps._acquire_sweep()
-    assert len(data) == N
-    assert circuit.set_calls == []  # nothing is set that the circuit does not have
-    assert ps.databuffer.calls == [("reset_read", 0), ("read", N)]
-    assert "waiting on the buffer index" in capsys.readouterr().out
-    assert ps._data_ready_ok is False
+    assert data is not None and len(data) == N
+    assert circuit.triggers == ["A", "B"]
+
+
+def test_a_reset_trigger_that_does_not_clear_the_flag_is_an_error(monkeypatch):
+    monkeypatch.setattr(pystim3, "DATA_READY_RESET_S", 0.01)
+    circuit = FakeCircuit(stuck=True)
+    circuit.flag = True
+    ps = make_ps(circuit, reset_trigger="A")
+    with pytest.raises(pystim3.CircuitError, match="after the reset trigger 'A'"):
+        ps._acquire_sweep()
+    assert circuit.triggers == ["A"]  # the sweep was not started
+
+
+def test_no_reset_trigger_by_default():
+    assert pystim3.Stimulus_Parameters().RP21_ResetTrigger is None
+    assert pystim3.Stimulus_Parameters().RP21_TriggerSource == "B"
 
 
 def test_a_sweep_that_never_completes_returns_none(capsys):
     circuit = FakeCircuit(never=True)
     ps = make_ps(circuit)
-    assert ps._acquire_sweep() is None
-    assert "not captured" in capsys.readouterr().out
+    assert ps._acquire_sweep() is None  # a failed sweep: the trial is repeated
+    assert "data_ready did not come" in capsys.readouterr().out
 
 
-def test_tag_probe_is_made_once():
-    circuit = FakeCircuit()
-    ps = make_ps(circuit)
-    ps._acquire_sweep()
-    assert ps._data_ready_ok is True
-    circuit.tags.pop("data_ready")  # would fail a second probe
-    assert ps._has_data_ready() is True
+def test_circuit_error_is_an_ioerror():
+    assert issubclass(pystim3.CircuitError, IOError)
+
+
+# --- the circuit is checked when it is loaded ---------------------------------------------
+
+
+class FakeProject:
+    def __init__(self, tags):
+        self.circuit = SimpleNamespace(tags={t: (1, "F") for t in tags}, convert=lambda *a: None)
+
+    def load_circuit(self, path, name):
+        return self.circuit
+
+
+def setup_ps(tags, tmp_path):
+    ps = pystim3.PyStim.__new__(pystim3.PyStim)
+    ps.State = pystim3.Stimulus_Status()
+    ps.Stimulus = pystim3.Stimulus_Parameters()
+    ps.RP21_proj = FakeProject(tags)
+    rcx = tmp_path / "abrs_v3.rcx"
+    rcx.write_bytes(b"")
+    return ps, rcx
+
+
+def test_circuit_with_all_tags_is_accepted(tmp_path):
+    ps, rcx = setup_ps(pystim3.CIRCUIT_TAGS, tmp_path)
+    assert ps.setup_RP21(str(rcx), acquisition_mode="abr") is True
+
+
+def test_circuit_without_the_tags_is_an_error_that_names_them(tmp_path):
+    ps, rcx = setup_ps(("sampled_wave", "sampled_wave_n"), tmp_path)
+    with pytest.raises(pystim3.CircuitError, match="data_ready, compare_count"):
+        ps.setup_RP21(str(rcx), acquisition_mode="abr")
+
+
+def test_calibration_circuit_is_not_checked_for_the_abr_tags(tmp_path):
+    ps, rcx = setup_ps((), tmp_path)
+    assert ps.setup_RP21(str(rcx), acquisition_mode="calibrate") is True
+
+
+# --- what happens to the acquisition when there is a circuit error ------------------------
+
+
+def test_a_circuit_error_stops_the_presenter_and_reports_it():
+    import threading
+
+    from src import presenter_thread
+
+    class Failing:
+        def play_sound(self, *args, **kwargs):
+            raise pystim3.CircuitError("the circuit is wrong")
+
+    wave = {("click", 80.0, 0): {"sound": np.zeros(10), "attenuation": [10.0]}}
+    protocol = {"stimuli": {"nreps": 3, "stimulus_period": 0.0}}
+    presenter = presenter_thread.Presenter()
+    messages = []
+    presenter.signal_hardware_error.connect(messages.append)
+    presenter.setWaveforms(wave=wave, protocol=protocol, sound_presentation_class=Failing())
+    app = pg.mkQApp("test")  # the signal is delivered to this thread, through its event loop
+    thread = threading.Thread(target=presenter.run)
+    thread.start()
+    deadline = time.time() + 5.0
+    while not messages and time.time() < deadline:
+        app.processEvents()
+        time.sleep(0.01)
+    presenter._quit = True  # end the loop
+    thread.join(timeout=5.0)
+    assert messages == ["the circuit is wrong"]
+    assert presenter._running is False
+    assert not thread.is_alive()  # the loop did not die from the exception, and has now been told to quit
+
+
+def test_the_window_stops_and_shows_the_circuit_error(monkeypatch):
+    from src import pyabr3
+
+    events = []
+    monkeypatch.setattr(pyabr3.MBox, "MessageBox", lambda message, title="": events.append(("box", message, title)))
+    app = SimpleNamespace(stop=lambda: events.append(("stop",)))
+    pyabr3.PyABR.hardware_error(app, "the circuit is wrong")
+    assert events == [("stop",), ("box", "the circuit is wrong", "Hardware")]

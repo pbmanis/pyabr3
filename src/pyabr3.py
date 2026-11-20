@@ -118,6 +118,7 @@ class PyABR(QtCore.QObject):
         # connect signals FROM the Presenter thread
         self.Presenter.signal_data_ready.connect(self.update_ABR)
         self.Presenter.signal_error.connect(self.thread_error)
+        self.Presenter.signal_hardware_error.connect(self.hardware_error)
         self.Presenter.signal_finished.connect(self.finished)
         self.Presenter.signal_progress.connect(self.update_progress)
         self.Presenter.signal_repetitions_done.connect(self.clear_average)
@@ -330,6 +331,13 @@ class PyABR(QtCore.QObject):
         self.win.close()
         if not atexit:
             exit()
+
+    def hardware_error(self, message: str):
+        """The acquisition stopped because the circuit is not set up as needed (for example
+        the sweep-done flag is not reset by the start trigger). Tell the user, and stop.
+        Related: presenter_thread.Presenter.run, pystim3.CircuitError."""
+        self.stop()
+        MBox.MessageBox(message, title="Hardware")
 
     def thread_error(self, data):
         print("Thread Error: ", data)
@@ -642,6 +650,9 @@ class PyABR(QtCore.QObject):
                 required_hardware=required_hardware,
                 ni_devicename=self.config["NI_device"],
             )
+        except pystim3.CircuitError as e:  # the circuit is not the one the acquisition needs
+            MBox.MessageBox(str(e), title="Hardware")
+            return
         except IOError as e:
             if mode == "freefield":
                 raise

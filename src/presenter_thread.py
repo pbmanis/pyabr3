@@ -51,6 +51,7 @@ class Presenter(QObject):  # (QtCore.QRunnable):
 
     signal_finished = pyqtSignal()  # protocol is ALL done
     signal_error = pyqtSignal(tuple)  # protocol has errored
+    signal_hardware_error = pyqtSignal(str)  # the circuit is not set up as needed: message
     signal_data_ready = pyqtSignal(
         np.ndarray, int, int
     )  #  returns 2 channels in the array, then the wave number and trial counter
@@ -120,7 +121,14 @@ class Presenter(QObject):  # (QtCore.QRunnable):
             # running
             if self._running and not self._paused:
                 self.signal_mode_status.emit("Running")
-                self.next_stimulus()
+                try:
+                    self.next_stimulus()
+                except pystim3.CircuitError as e:
+                    # a hardware setup problem: repeating the trial cannot fix it, so stop
+                    print(f"Presenter: circuit error: {e!s}")
+                    self._running = False
+                    self.signal_hardware_error.emit(str(e))
+                    continue
                 time.sleep(self.protocol["stimuli"]["stimulus_period"])
 
     def retrieve_data(self) -> bool:

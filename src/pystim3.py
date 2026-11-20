@@ -77,6 +77,14 @@ import numpy as np
 
 SWEEP_POLL_S = 0.005  # polling interval (s) while waiting for the RP2.1 sweep to fill
 DATA_READY_SETTLE_S = 0.002  # wait (s) after data_ready for the last samples to be stored
+DATA_READY_RESET_S = 0.05  # time (s) allowed for the reset trigger to clear data_ready
+CIRCUIT_TAGS = ("sampled_wave", "sampled_wave_n", "data_ready", "compare_count")  # the abr circuit needs
+
+
+class CircuitError(IOError):
+    """The RP2.1 circuit does not behave as the acquisition needs (missing tags, or the
+    sweep-done flag is not reset by the start trigger). It is a hardware setup problem,
+    not a bad sweep that a repeat would fix."""
 
 # Check for the system we are running on, and what hardware/software is available.
 opsys = platform.system()
@@ -155,6 +163,9 @@ class Stimulus_Parameters:
     RP21_out_sampleFreq: float = 0.0
     RP21_in_sampleFreq: float = 0.0
     RP21_TriggerSource: str = "B"
+    # A trigger that resets data_ready, fired before the start trigger, for a circuit whose
+    # start trigger does not reset it. None: the start trigger alone is expected to reset it.
+    RP21_ResetTrigger: str | None = None
     RZ5D_in_sampleFreq: float = 24410.0
     RZ5D_out_sampleFreq: float = 24410.0
     soundcard_out_sampleFreq: float = def_soundcard_outputrate
@@ -409,6 +420,13 @@ class PyStim:
 
         self.RP21_circuit = self.RP21_proj.load_circuit(self.RP21_rcxfile, "RP2")
         if acquisition_mode == "abr":
+            missing = [tag for tag in CIRCUIT_TAGS if tag not in self.RP21_circuit.tags]
+            if len(missing) > 0:
+                raise CircuitError(
+                    f"The circuit {self.RP21_rcxfile!s} does not have the tag(s) "
+                    f"{', '.join(missing)}, which the ABR acquisition needs (the latched "
+                    f"sweep-done flag is in abrs_v3.rcx)."
+                )
             self.samp_cof_flag = 2  # set for 24 kHz
         elif acquisition_mode == "calibrate":
             self.samp_cof_flag = 5
@@ -759,20 +777,21 @@ class PyStim:
 
         return True
 
-    _data_ready_ok: bool | None = None  # does the circuit have data_ready and compare_count?
-
-    def _has_data_ready(self) -> bool:
-        """True if the circuit has the "data_ready" and "compare_count" tags (abrs_v3.rcx
-        with the latched sweep-done flag). Circuits without them are read by the buffer index."""
-        if self._data_ready_ok is None:
-            try:
-                self.RP21_circuit.get_tag("data_ready")
-                self.RP21_circuit.get_tag("compare_count")
-                self._data_ready_ok = True
-            except Exception:
-                self._data_ready_ok = False
-                print("data_ready/compare_count not in the circuit; waiting on the buffer index")
-        return self._data_ready_ok
+    def _reset_data_ready(self):
+        """Fire the reset trigger (Stimulus.RP21_ResetTrigger), if there is one, and check that
+        data_ready has cleared. For a circuit whose start trigger does not reset the flag."""
+        reset = self.Stimulus.RP21_ResetTrigger
+        if reset is None:
+            return
+        self.RP21_circuit.trigger(reset)
+        t0 = time.time()
+        while self.RP21_circuit.get_tag("data_ready"):
+            if (time.time() - t0) > DATA_READY_RESET_S:
+                raise CircuitError(
+                    f"data_ready is still set {DATA_READY_RESET_S * 1000:.0f} ms after the "
+                    f"reset trigger {reset!r}"
+                )
+            time.sleep(0.001)
 
     def _acquire_sweep(self) -> np.ndarray | None:
         """
@@ -787,70 +806,60 @@ class PyStim:
         chain is retrieveRP21_inputs -> Presenter.retrieve_data/next_stimulus
         (presenter_thread.py), which repeats the trial.
 
-        Diagnostics for each sweep are printed (running tag before/after the trigger,
-        poll count, time to completion, samples pending).
+        Bug (second version): waiting on the buffer index could miss the end of the sweep,
+        because the index wraps. The circuit now has a latched "data_ready" flag (the
+        iCompare of the buffer index against "compare_count" into a JK flip-flop, reset by
+        the start trigger), and the sweep is complete when it is set. There is no
+        fallback: setup_RP21 refuses a circuit without the tags (CircuitError), and a flag
+        that the start trigger did not clear raises CircuitError here, with what is needed
+        to find the cause. Stimulus.RP21_ResetTrigger can name an extra trigger, fired first.
 
-        If the circuit has the latched "data_ready" flag (set by the iCompare of the buffer
-        index against "compare_count"; reset by the start trigger), the sweep is complete
-        when it is set, which cannot be missed the way the wrapping index can. Otherwise
-        the buffer index is polled, as before.
+        Diagnostics for each sweep are printed (data_ready before and after the trigger,
+        poll count, time to completion).
         """
         n = int(self.acquisition_points)
         buf = self.databuffer
         timeout = n / float(self.Stimulus.RP21_in_sampleFreq) * 1.5 + 0.5
-        use_flag = self._has_data_ready()
-        if use_flag:
-            # data_ready is set when the buffer index reaches compare_count. The index tag
-            # is in raw units (samples * channels / compression); the last index is
-            # raw_n - 1, which works with an EQ or a GE test in the circuit.
-            raw_n = int(round(n * getattr(buf, "channels", 1) / getattr(buf, "compression", 1)))
-            self.RP21_circuit.set_tag("compare_count", raw_n - 1)
+        circuit = self.RP21_circuit
+        # data_ready is set when the buffer index reaches compare_count. The index tag is in
+        # raw units (samples * channels / compression); the last index is raw_n - 1, which
+        # works with an EQ or a GE test in the circuit.
+        raw_n = int(round(n * getattr(buf, "channels", 1) / getattr(buf, "compression", 1)))
+        circuit.set_tag("compare_count", raw_n - 1)
         buf.reset_read(0)
-        running_before = self.RP21_circuit.get_tag("running")
+        self._reset_data_ready()
+        ready_before = bool(circuit.get_tag("data_ready"))
         t0 = time.time()
-        self.RP21_circuit.trigger(self.Stimulus.RP21_TriggerSource)  # also resets data_ready
-        running_after = self.RP21_circuit.get_tag("running")
-        ready_after = None
-        if use_flag:
-            ready_after = bool(self.RP21_circuit.get_tag("data_ready"))
-            if ready_after:  # the trigger did not clear it, so it says nothing about this sweep
-                print("****** data_ready is still set after the trigger; using the buffer index")
-                use_flag = False
+        circuit.trigger(self.Stimulus.RP21_TriggerSource)  # must also reset data_ready
+        ready_after = bool(circuit.get_tag("data_ready"))
+        if ready_after:  # a sweep takes many ms, so it cannot be complete yet
+            raise CircuitError(
+                "data_ready is still set just after the start trigger "
+                f"(before the trigger: {ready_before}; compare_count: "
+                f"{circuit.get_tag('compare_count')}; buffer index: {buf.write_index}). "
+                "The circuit must clear it on the start trigger, or Stimulus.RP21_ResetTrigger "
+                "must name a trigger that does."
+            )
         done = False
-        pending = 0
         n_polls = 0
         while (time.time() - t0) < timeout:
             n_polls += 1
-            if use_flag:
-                if self.RP21_circuit.get_tag("data_ready"):
-                    done = True
-                    break
-            else:
-                try:
-                    pending = buf.pending()
-                except ValueError as e:  # more than a buffer's worth: data were overwritten
-                    print(f"****** sweep overrun: {e!s}")
-                    break
-                if pending >= n:
-                    done = True
-                    break
+            if circuit.get_tag("data_ready"):
+                done = True
+                break
             time.sleep(SWEEP_POLL_S)
         print(
-            f"sweep: running {running_before}->{running_after}, data_ready after trigger "
-            f"{ready_after}, by {'flag' if use_flag else 'index'}, polls={n_polls:d}, "
-            f"t={time.time() - t0:.3f} s, pending={pending:d}/{n:d}, "
+            f"sweep: data_ready before/after trigger {ready_before}/{ready_after}, "
+            f"polls={n_polls:d}, t={time.time() - t0:.3f} s, "
             f"write_index={buf.write_index}, done={done}"
         )
         if not done:
-            print("****** sweep not captured: timeout or overrun")
+            print("****** sweep not captured: data_ready did not come")
             return None
-        if use_flag:
-            # the flag is set as the last index is reached: let the last samples be stored,
-            # then read the n samples from the start of the buffer, without the wrap counting
-            time.sleep(DATA_READY_SETTLE_S)
-            data = np.asarray(buf._read(0, n)).squeeze()
-        else:
-            data = np.asarray(buf.read(n)).squeeze()
+        # the flag is set as the last index is reached: let the last samples be stored, then
+        # read the n samples from the start of the buffer, without the wrap counting
+        time.sleep(DATA_READY_SETTLE_S)
+        data = np.asarray(buf._read(0, n)).squeeze()
         if data.ndim != 1 or data.shape[0] != n:
             print(f"****** sweep has wrong shape: {data.shape}, expected ({n:d},)")
             return None

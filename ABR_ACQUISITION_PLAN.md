@@ -108,3 +108,16 @@ Things to check on the rig:
 - That `data_ready` reads 0 just after the trigger. If the circuit is stopped and restarted for each trial, the flip-flop should be clear at the start anyway.
 - That the index the iCompare sees is the SerStore index in raw units. If it is not, `compare_count` will not match. The sweep would then time out, and the `sweep:` line would show it.
 - If the last sample of a sweep looks wrong, increase `DATA_READY_SETTLE_S`.
+
+## Update: first test on the rig, and no fallback
+The first run with `data_ready` printed, for every trial: `data_ready is still set after the trigger`, then `by index, polls=106-205, t=1.23-1.26 s, pending=29696/29696, write_index=0.0`. So the sweeps were read correctly by the buffer index (29696 samples is 1.216 s at 24.4 kHz, and the index wrapped to 0 at the end), but the flag was already high just after the start trigger: the zBusB edge detect is not clearing it, or it is being set again at once.
+
+Changes made:
+- A circuit that lacks `sampled_wave`, `sampled_wave_n`, `data_ready` or `compare_count` is now an error (`pystim3.CircuitError`), raised when the circuit is loaded (`setup_RP21`, ABR mode only; the calibration circuit is not checked). There is no buffer-index fallback any more.
+- A flag that is still set just after the start trigger is also a `CircuitError`, not a bad sweep: repeating the trial cannot fix it. The message gives the value of `data_ready` before the trigger, `compare_count` and the buffer index. Reading them:
+  - set before and after: the flip-flop is not being reset (the K input, or the edge detect of zBusB).
+  - clear before and set after: the trigger is setting it, so the comparison is true at the start (for example if the compare is against a value that the index meets at 0, or if J is not gated by the sweep).
+- In the program the error stops the acquisition and shows a message box ("Hardware"), instead of quitting the program or counting skipped trials: `Presenter.run` catches it and sends `signal_hardware_error`; `PyABR.hardware_error` stops and shows it. At startup (and for each acquisition) a circuit without the tags shows the same message.
+- `Stimulus_Parameters.RP21_ResetTrigger` (default `None`) can name an extra trigger, for example a software trigger wired to K, which is fired before the start trigger and must clear `data_ready` within 50 ms (`CircuitError` if not). It is only needed if the start trigger cannot be made to reset the flag.
+
+Until the circuit resets `data_ready` on the start trigger (or `RP21_ResetTrigger` is set), acquisition will stop with the message on the first trial.
