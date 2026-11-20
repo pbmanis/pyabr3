@@ -332,6 +332,24 @@ class PyABR(QtCore.QObject):
         if not atexit:
             exit()
 
+    def sweep_length_error(self, got: int, expected: int):
+        """A sweep has the wrong length: stop and say so.
+
+        Bug: update_ABR used to pad a short sweep with its mean, and cut a long one, to
+        fit the running average, which hid sweeps that were not read properly. The
+        acquisition now reads exactly acquisition_points samples and rejects any other
+        sweep (pystim3.PyStim._acquire_sweep, retrieveRP21_inputs, and the repeat in
+        presenter_thread.Presenter.next_stimulus), so this should not happen; if it does
+        there is a fault that must not be averaged over.
+        """
+        message = (
+            f"A sweep has {got:d} samples, but {expected:d} were expected. The acquisition "
+            "was stopped, because averaging it would hide a fault."
+        )
+        print("****** ", message)
+        self.stop()
+        MBox.MessageBox(message, title="Acquisition")
+
     def hardware_error(self, message: str):
         """The acquisition stopped because the circuit is not set up as needed (for example
         the sweep-done flag is not reset by the start trigger). Tell the user, and stop.
@@ -734,8 +752,8 @@ class PyABR(QtCore.QObject):
                 rng.standard_normal(self.PS.Ndata) * 1e-6,
             ]
         self.ch1_data = np.array(chdata[0]).squeeze()
-        if len(self.ch1_data) == 0:  # didn't get the data... 
-            print("Trial data is missing; retrying: ", self.TrialCounter, self.ch1_data.shape)
+        if len(self.ch1_data) == 0:  # the acquisition passes on only sweeps of the right length
+            self.sweep_length_error(0, int(self.PS.acquisition_points))
             return False
         # self.ch2_data = np.array(ch2[0]).T
         print("trial: ", self.TrialCounter, self.ch1_data.shape)
@@ -744,15 +762,9 @@ class PyABR(QtCore.QObject):
             self.plot_ABR_Raw.clear()
 
         else:
-            # print("buffer shapes: ", self.ch1_data.shape, self.summed_buffer.shape)
-            if len(self.ch1_data) < len(self.summed_buffer):
-                n_extend = len(self.summed_buffer) - len(self.ch1_data)
-                # print("Lens: ", len(self.ch1_data), len(self.summed_buffer), n_extend)
-                self.ch1_data = np.append(self.ch1_data, np.mean(self.ch1_data) * np.ones(n_extend))
-                # print("Shape: ", self.ch1_data.shape, self.summed_buffer.shape)
-            elif len(self.ch1_data) > len(self.summed_buffer):  # longer
-                self.ch1_data = self.ch1_data[:len(self.summed_buffer)]
-            
+            if len(self.ch1_data) != len(self.summed_buffer):
+                self.sweep_length_error(len(self.ch1_data), len(self.summed_buffer))
+                return False
             self.summed_buffer = self.summed_buffer + self.ch1_data
         
         _, self.sfin, self.sfout = self.PS.getHardware()

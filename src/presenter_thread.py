@@ -83,6 +83,7 @@ class Presenter(QObject):  # (QtCore.QRunnable):
         self.parameters = parameters
         self.wave_counter = 0
         self.repetition_counter = 0
+        self.n_repeats = 0  # trials repeated because of a bad sweep, in this run
 
     @pyqtSlot()
     def run(self):
@@ -197,11 +198,17 @@ class Presenter(QObject):  # (QtCore.QRunnable):
         for attempt in range(MAX_RETRIES + 1):
             if self._present_once():
                 return
-            print(
-                f"Presenter: wave {self.wave_counter:d}, rep {self.repetition_counter:d}: "
-                + f"bad sweep, attempt {attempt + 1:d}/{MAX_RETRIES + 1:d}"
-            )
-        print("Presenter: too many bad sweeps; trial skipped")
+            where = f"wave {self.wave_counter:d}, rep {self.repetition_counter:d}"
+            if attempt < MAX_RETRIES:
+                self.n_repeats += 1
+                print(
+                    f"Presenter: {where}: bad sweep (attempt {attempt + 1:d} of "
+                    f"{MAX_RETRIES + 1:d}); REPEATING THE TRIAL "
+                    f"({self.n_repeats:d} repeat(s) so far in this run)"
+                )
+            else:
+                print(f"Presenter: {where}: bad sweep (attempt {attempt + 1:d} of {MAX_RETRIES + 1:d})")
+        print("Presenter: too many bad sweeps; TRIAL SKIPPED")
         self.signal_mode_status.emit("Trial skipped: no data from RP2.1")
 
     def _present_once(self) -> bool:
@@ -297,6 +304,7 @@ class Presenter(QObject):  # (QtCore.QRunnable):
         self.wavekeys = list(self.wave_matrix.keys())
         self.wave_counter = 0  # reset counter of the waveforms
         self.repetition_counter = 0
+        self.n_repeats = 0
         self.wavetype = self.wavekeys[0][0]  # get the first key of the first waveform.
         self.n_waves = len(self.wavekeys)
         self.n_repetitions = self.protocol["stimuli"]["nreps"]

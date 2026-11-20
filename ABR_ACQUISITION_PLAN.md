@@ -121,3 +121,18 @@ Changes made:
 - `Stimulus_Parameters.RP21_ResetTrigger` (default `None`) can name an extra trigger, for example a software trigger wired to K, which is fired before the start trigger and must clear `data_ready` within 50 ms (`CircuitError` if not). It is only needed if the start trigger cannot be made to reset the flag.
 
 Until the circuit resets `data_ready` on the start trigger (or `RP21_ResetTrigger` is set), acquisition will stop with the message on the first trial.
+
+## Update: the flag was set before the trigger, on the first trial
+The error on the rig was: before the trigger True, `compare_count` 29695, buffer index 0, and still set after the trigger. Two changes in `pystim3.py`:
+- `compare_count` is now also set in `load_and_arm` before the circuit starts (`_compare_count`, the last raw index). Before, it was set only after the start, so its default (0) could equal the idle buffer index (0) and set `data_ready` at power-up (an EQ test; a GE test would too). If the flag is now clear before the first trigger, that was the cause of the first-trial error.
+- After the start trigger, a flag that is still set is waited for to clear, for up to 0.1 s or half of the sweep if that is shorter (`DATA_READY_CLEAR_S`). If it clears (a slow reset), the sweep goes on and "data_ready cleared N ms after the start trigger" is printed. If not, `CircuitError` says "stayed set", with the value before the trigger, `compare_count` and the buffer index.
+What it shows on the rig:
+- clear before the first trigger, and cleared by the trigger: working.
+- clear before the first trigger, but set before the next trial's trigger (the flag left by the last sweep, because stopping and starting the circuit does not clear it) and not cleared by the trigger: the reset (K, or the zBusB edge detect) does not work, and `RP21_ResetTrigger`, or a different reset in the circuit, is needed.
+
+## Update: sanity line, announced repeats, and no length adjustment
+Rig result: trial 1 had `data_ready` clear before and after the trigger; later trials had it set before (left by the last sweep) and cleared 10-12 ms after the start trigger, which the software waits for. The sweeps were 29696 samples.
+- `pystim3.PyStim._check_sweep` prints, for every sweep, `sanity: std=..., min=..., max=..., trailing zeros=N, same as previous sweep=False`. A sweep is rejected (the trial is repeated) if it ends in more than `MAX_TRAILING_ZEROS` (16) exact zeros (the buffer was not filled to the end, or the input is dead), or is identical to the previous sweep (the buffer was not overwritten). Every rejection prints `****** BAD SWEEP (the trial will be repeated): <reason>`.
+- `Presenter.next_stimulus` announces each repeat: `bad sweep (attempt 1 of 4); REPEATING THE TRIAL (N repeat(s) so far in this run)`, and `TRIAL SKIPPED` after `MAX_RETRIES` repeats. `Presenter.n_repeats` counts the repeats in a run. A repeat does not count as a trial.
+- `PyABR.update_ABR` no longer pads a short sweep with its mean or cuts a long one. A sweep of the wrong length (or empty) stops the acquisition with a message (`PyABR.sweep_length_error`), because averaging it would hide a fault. The acquisition only passes on sweeps of exactly `acquisition_points`, so this should never appear.
+- Test with the microphone on the analog input: the response of the microphone is the same on every trial, so in the average it should stay at the same amplitude and latency while the noise falls as 1/sqrt(trials). A sweep that is late or early, or stale, would smear or shrink it.

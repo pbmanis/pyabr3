@@ -79,6 +79,7 @@ SWEEP_POLL_S = 0.005  # polling interval (s) while waiting for the RP2.1 sweep t
 DATA_READY_SETTLE_S = 0.002  # wait (s) after data_ready for the last samples to be stored
 DATA_READY_RESET_S = 0.05  # time (s) allowed for the reset trigger to clear data_ready
 DATA_READY_CLEAR_S = 0.1  # time (s) allowed for the start trigger to clear data_ready
+MAX_TRAILING_ZEROS = 16  # a sweep ending in more exact zeros than this was not filled
 CIRCUIT_TAGS = ("sampled_wave", "sampled_wave_n", "data_ready", "compare_count")  # the abr circuit needs
 
 
@@ -878,14 +879,51 @@ class PyStim:
             f"write_index={buf.write_index}, done={done}"
         )
         if not done:
-            print("****** sweep not captured: data_ready did not come")
+            print("****** BAD SWEEP (the trial will be repeated): data_ready did not come")
             return None
         # the flag is set as the last index is reached: let the last samples be stored, then
         # read the n samples from the start of the buffer, without the wrap counting
         time.sleep(DATA_READY_SETTLE_S)
         data = np.asarray(buf._read(0, n)).squeeze()
         if data.ndim != 1 or data.shape[0] != n:
-            print(f"****** sweep has wrong shape: {data.shape}, expected ({n:d},)")
+            print(
+                f"****** BAD SWEEP (the trial will be repeated): shape {data.shape}, "
+                f"expected ({n:d},)"
+            )
+            return None
+        return self._check_sweep(data)
+
+    _previous_sweep: np.ndarray | None = None  # the last sweep read, for the sanity check
+
+    def _check_sweep(self, data: np.ndarray) -> np.ndarray | None:
+        """Print a line of statistics of a sweep, and reject one that cannot be right.
+
+        A sweep is rejected (None, so the trial is repeated) if it ends in more than
+        MAX_TRAILING_ZEROS exact zeros (the buffer was not filled to the end, or the input
+        is dead), or is identical to the previous sweep (the buffer was not overwritten).
+        Noise from the amplifier makes neither possible in a good sweep.
+        """
+        nonzero = np.flatnonzero(data)
+        trailing_zeros = len(data) if len(nonzero) == 0 else len(data) - 1 - int(nonzero[-1])
+        previous = self._previous_sweep
+        same_as_previous = previous is not None and np.array_equal(previous, data)
+        self._previous_sweep = data.copy()
+        print(
+            f"sanity: std={np.std(data):.3e} V, min={np.min(data):.3e}, max={np.max(data):.3e}, "
+            f"trailing zeros={trailing_zeros:d}, same as previous sweep={same_as_previous}"
+        )
+        if trailing_zeros > MAX_TRAILING_ZEROS:
+            print(
+                f"****** BAD SWEEP (the trial will be repeated): it ends in {trailing_zeros:d} "
+                f"exact zeros (more than {MAX_TRAILING_ZEROS:d}): the buffer was not filled, "
+                "or the input is dead"
+            )
+            return None
+        if same_as_previous:
+            print(
+                "****** BAD SWEEP (the trial will be repeated): identical to the previous "
+                "sweep, so the buffer was not overwritten"
+            )
             return None
         return data
 

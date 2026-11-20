@@ -87,7 +87,9 @@ class FakeBuffer:
         self.channels = channels
         self.compression = compression
         self.calls = []
-        self.data = 1.0 + np.arange(N)
+        self.rng = np.random.default_rng(1)
+        self.next_data = None  # what the next read gives, if not noise
+        self.last = None  # what the last read gave
 
     def reset_read(self, index):
         self.calls.append(("reset_read", index))
@@ -99,7 +101,10 @@ class FakeBuffer:
 
     def _read(self, offset, length):
         self.calls.append(("_read", offset, length))
-        return self.data[np.newaxis, offset : offset + length]
+        data = self.next_data if self.next_data is not None else self.rng.standard_normal(N)
+        self.next_data = None
+        self.last = data
+        return data[np.newaxis, offset : offset + length]
 
 
 def make_ps(circuit, channels=1, compression=1, reset_trigger=None):
@@ -117,7 +122,7 @@ def test_data_ready_ends_the_sweep_and_the_data_are_read_from_the_start():
     circuit = FakeCircuit()
     ps = make_ps(circuit)
     data = ps._acquire_sweep()
-    np.testing.assert_array_equal(data, 1.0 + np.arange(N))
+    np.testing.assert_array_equal(data, ps.databuffer.last)
     assert circuit.set_calls == [("compare_count", N - 1)]  # the last index of the buffer
     assert circuit.triggers == [ps.Stimulus.RP21_TriggerSource]
     assert ps.databuffer.calls == [("reset_read", 0), ("_read", 0, N)]
@@ -375,3 +380,175 @@ def test_compare_count_is_set_before_the_circuit_starts(monkeypatch):
     assert names[0] == ("set", "compare_count", N - 1)  # before the circuit starts
     assert names[1] == ("start",)
     assert ps.ch1 is not None and len(ps.ch1) == N
+
+
+# --- the sanity line, and rejecting sweeps that cannot be right ---------------------------
+
+
+def test_sanity_line_is_printed_for_each_sweep(capsys):
+    ps = make_ps(FakeCircuit())
+    assert ps._acquire_sweep() is not None
+    out = capsys.readouterr().out
+    assert "sanity: std=" in out
+    assert "trailing zeros=0" in out
+    assert "same as previous sweep=False" in out
+
+
+def test_a_sweep_identical_to_the_previous_one_is_rejected_with_a_message(capsys):
+    circuit = FakeCircuit()
+    ps = make_ps(circuit)
+    first = ps._acquire_sweep()
+    assert first is not None
+    ps.databuffer.next_data = first.copy()  # the buffer was not overwritten
+    assert ps._acquire_sweep() is None
+    out = capsys.readouterr().out
+    assert "same as previous sweep=True" in out
+    assert "BAD SWEEP (the trial will be repeated)" in out
+    assert "identical to the previous sweep" in out
+    assert ps._acquire_sweep() is not None  # the repeat gets new data
+
+
+def test_a_sweep_that_ends_in_zeros_is_rejected_with_a_message(capsys):
+    ps = make_ps(FakeCircuit())
+    partial = np.random.default_rng(2).standard_normal(N)
+    partial[-100:] = 0.0  # the buffer was not filled to the end
+    ps.databuffer.next_data = partial
+    assert ps._acquire_sweep() is None
+    out = capsys.readouterr().out
+    assert "trailing zeros=100" in out
+    assert "BAD SWEEP (the trial will be repeated)" in out
+    assert "100 exact zeros" in out
+
+
+def test_a_few_zeros_at_the_end_are_allowed():
+    ps = make_ps(FakeCircuit())
+    data = np.random.default_rng(3).standard_normal(N)
+    data[-pystim3.MAX_TRAILING_ZEROS :] = 0.0
+    ps.databuffer.next_data = data
+    assert ps._acquire_sweep() is not None
+
+
+def test_a_dead_input_is_rejected(capsys):
+    ps = make_ps(FakeCircuit())
+    ps.databuffer.next_data = np.zeros(N)
+    assert ps._acquire_sweep() is None
+    assert f"trailing zeros={N:d}" in capsys.readouterr().out
+
+
+def test_other_bad_sweeps_also_say_that_the_trial_is_repeated(capsys):
+    ps = make_ps(FakeCircuit(never=True))
+    assert ps._acquire_sweep() is None
+    assert "BAD SWEEP (the trial will be repeated)" in capsys.readouterr().out
+
+
+# --- the repeat is announced, and counted ---------------------------------------------------
+
+
+class SometimesBad:
+    """A sound class whose first sweeps are bad (None)."""
+
+    def __init__(self, n_bad):
+        self.n_bad = n_bad
+        self.plays = 0
+
+    def play_sound(self, *args, **kwargs):
+        self.plays += 1
+
+    def retrieveRP21_inputs(self):
+        if self.plays <= self.n_bad:
+            return None
+        return (np.zeros(4), np.zeros(4))
+
+
+def presenter_with(sound):
+    from src import presenter_thread
+
+    wave = {("click", 80.0, 0): {"sound": np.zeros(10), "attenuation": [10.0]}}
+    protocol = {"stimuli": {"nreps": 2, "stimulus_period": 0.0}}
+    presenter = presenter_thread.Presenter()
+    presenter.setWaveforms(wave=wave, protocol=protocol, sound_presentation_class=sound)
+    return presenter
+
+
+def test_a_repeated_trial_is_announced_and_counted(capsys):
+    sound = SometimesBad(n_bad=2)
+    presenter = presenter_with(sound)
+    presenter.next_stimulus()
+    out = capsys.readouterr().out
+    assert sound.plays == 3  # two bad sweeps, then a good one
+    assert out.count("REPEATING THE TRIAL") == 2
+    assert "attempt 1 of 4" in out and "attempt 2 of 4" in out
+    assert "2 repeat(s) so far in this run" in out
+    assert presenter.n_repeats == 2
+    assert presenter.repetition_counter == 1  # the trial counts once
+    assert "TRIAL SKIPPED" not in out
+
+
+def test_no_message_and_no_count_when_no_repeat_is_needed(capsys):
+    presenter = presenter_with(SometimesBad(n_bad=0))
+    presenter.next_stimulus()
+    assert "REPEATING" not in capsys.readouterr().out
+    assert presenter.n_repeats == 0
+
+
+def test_a_trial_that_keeps_failing_is_skipped_with_a_message(capsys):
+    sound = SometimesBad(n_bad=100)
+    presenter = presenter_with(sound)
+    presenter.next_stimulus()
+    out = capsys.readouterr().out
+    assert sound.plays == 4  # the first attempt and MAX_RETRIES repeats
+    assert out.count("REPEATING THE TRIAL") == 3
+    assert "TRIAL SKIPPED" in out
+
+
+def test_the_repeat_count_starts_again_with_each_run():
+    presenter = presenter_with(SometimesBad(n_bad=1))
+    presenter.next_stimulus()
+    assert presenter.n_repeats == 1
+    presenter.setWaveforms(wave=presenter.wave_matrix, protocol=presenter.protocol,
+                           sound_presentation_class=presenter.sound_class)
+    assert presenter.n_repeats == 0
+
+
+# --- update_ABR no longer adjusts the length of a sweep -------------------------------------
+
+
+def update_abr_app(summed_length, expected):
+    from src import pyabr3
+
+    events = []
+    app = SimpleNamespace(
+        TrialCounter=2,
+        summed_buffer=np.zeros(summed_length),
+        PS=SimpleNamespace(acquisition_points=expected),
+        stop=lambda: events.append("stop"),
+        events=events,
+    )
+    app.sweep_length_error = lambda got, want: pyabr3.PyABR.sweep_length_error(app, got, want)
+    return app
+
+
+def test_a_sweep_of_the_wrong_length_stops_the_acquisition_with_a_message(monkeypatch):
+    from src import pyabr3
+
+    messages = []
+    monkeypatch.setattr(pyabr3.MBox, "MessageBox", lambda message, title="": messages.append(message))
+    app = update_abr_app(summed_length=100, expected=100)
+    for length in (90, 110):  # short and long: neither is padded or cut
+        app.events.clear()
+        result = pyabr3.PyABR.update_ABR(app, np.array([np.ones(length), np.ones(length)]), 0, 1)
+        assert result is False
+        assert app.events == ["stop"]
+    assert f"A sweep has 110 samples, but 100 were expected" in messages[-1]
+    assert np.all(app.summed_buffer == 0)  # nothing was added to the average
+
+
+def test_an_empty_sweep_is_an_error_too(monkeypatch):
+    from src import pyabr3
+
+    messages = []
+    monkeypatch.setattr(pyabr3.MBox, "MessageBox", lambda message, title="": messages.append(message))
+    app = update_abr_app(summed_length=100, expected=100)
+    assert pyabr3.PyABR.update_ABR(app, np.array([np.zeros(0), np.zeros(0)]), 0, 1) is False
+    assert app.events == ["stop"]
+    assert "0 samples, but 100 were expected" in messages[0]
