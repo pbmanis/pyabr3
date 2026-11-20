@@ -2,6 +2,44 @@ from pyqtgraph import configfile
 import convert_nested_ordered_dict
 from pathlib import Path
 
+# How the stimulus is presented. "freefield" (one speaker) is the original behavior.
+PRESENTATION_MODES = (
+    "freefield",
+    "monaural_left",
+    "monaural_right",
+    "binaural",
+    "bic_sequential",
+    "bic_interleaved",
+)
+DEFAULT_MODE = "freefield"
+
+
+def get_mode(protocol: dict) -> str:
+    """Return the presentation mode of a protocol.
+
+    The "mode" key (under "stimuli") is optional; a protocol without it is free-field.
+    The protocol dictionary is not modified, so free-field data files are unchanged.
+    Raises ValueError for an unknown mode.
+    """
+    mode = protocol["stimuli"].get("mode", DEFAULT_MODE)
+    if mode not in PRESENTATION_MODES:
+        raise ValueError(
+            f"Unknown stimulus mode {mode!r}; it must be one of {', '.join(PRESENTATION_MODES)}"
+        )
+    return mode
+
+
+def required_hardware_for_mode(required_hardware: list, mode: str) -> list:
+    """Return the hardware to request for a presentation mode: the configured list, plus
+    the second attenuator ("PA5_2", the right path) for the binaural modes when the
+    configuration has an attenuator at all. Free-field gets the list unchanged.
+    """
+    hardware = list(required_hardware)
+    if mode != "freefield" and "PA5" in hardware and "PA5_2" not in hardware:
+        hardware.append("PA5_2")
+    return hardware
+
+
 class ProtocolReader():
     def __init__(self, ptreedata):
         self.ptreedata = ptreedata
@@ -22,6 +60,7 @@ class ProtocolReader():
         #     if isinstance(protocol['stimuli']["freqlist"], str):
         #         protocol['stimuli']["freqlist"] = list(eval(str))
         protocol = convert_nested_ordered_dict.convert_nested_ordered_dict(protocol)
+        get_mode(protocol)  # reject an unknown mode when the protocol is read
         # paste the raw string into the text box for reference
         self._protocol = protocol  # the parameters in a dictionary...
         if update:
@@ -69,6 +108,19 @@ class ProtocolReader():
                 child.setValue(self._protocol["stimuli"]["freqlist"])
             if child.name() == "dblist":
                 child.setValue(self._protocol["stimuli"]["dblist"])
+        # the binaural fields: shown only in the binaural modes (free-field protocols have none)
+        stimuli = self._protocol["stimuli"]
+        mode = get_mode(self._protocol)
+        binaural = mode != DEFAULT_MODE
+        for child in data.children():
+            if child.name() == "mode":
+                child.setValue(mode)
+            if child.name() == "dblist_right":
+                child.setValue(str(stimuli.get("dblist_right", "")))
+                child.show(binaural)
+            if child.name() == "itd":
+                child.setValue(float(stimuli.get("itd", 0.0)))
+                child.show(binaural)
         # self.make_and_plot()
         # self.stimulus_waveform.enableAutoRange()
         # self.Dock_Recording.raiseDock()

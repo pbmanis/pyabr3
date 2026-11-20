@@ -109,9 +109,59 @@ def build_parametertree(known_protocols, current_protocol, stimuli:dict, data_pa
                 },
                 {
                     "name": "dblist",
-                    "tip": "Stimulus levels presented (dB SPL).",
+                    "tip": "Stimulus levels presented (dB SPL). In the binaural modes these "
+                    "are the levels of the left path.",
                     "type": "str",
                     "value": "[0.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0]",
+                },
+                {
+                    "name": "mode",
+                    "tip": "How the stimulus is presented: freefield (one speaker, the "
+                    "left path), monaural_left, monaural_right, binaural, or "
+                    "bic_interleaved (left, right and binaural in one sweep).",
+                    "type": "str",
+                    "value": "freefield",
+                },
+                {
+                    "name": "dblist_right",
+                    "tip": "Stimulus levels of the right path (dB SPL), paired by position "
+                    "with dblist. Binaural modes only.",
+                    "type": "str",
+                    "value": "",
+                    "visible": False,
+                },
+                {
+                    "name": "itd",
+                    "tip": "Interaural time difference (s): the time of the right path "
+                    "stimulus relative to the left in binaural slots. Positive means the "
+                    "right path lags. Binaural modes only.",
+                    "type": "float",
+                    "value": 0.0,
+                    "visible": False,
+                },
+            ],
+        },
+        {
+            "name": "Calibration",  # which calibration each output path uses
+            "tip": "The calibration files in use. 'Left' is the first output path (NI ao0, "
+            "attenuator 1), the only one in free-field mode. 'Right' is the second output "
+            "path (ao1, attenuator 2), used in binaural modes.",
+            "type": "group",
+            "children": [
+                {
+                    "name": "Left (free-field) path",
+                    "tip": "Calibration of the left path (NI ao0, attenuator 1).",
+                    "type": "str",
+                    "value": "",
+                    "readonly": True,
+                },
+                {
+                    "name": "Right path",
+                    "tip": "Calibration of the right path (NI ao1, attenuator 2). Without a "
+                    "separate file, the right path uses the left calibration.",
+                    "type": "str",
+                    "value": "",
+                    "readonly": True,
                 },
             ],
         },
@@ -168,7 +218,13 @@ def build_parametertree(known_protocols, current_protocol, stimuli:dict, data_pa
                 {"name": "Load Data File", "tip": "Opens the data viewer.", "type": "action"},
                 {
                     "name": "Read Cal File",
-                    "tip": "Chooses the speaker calibration to use.",
+                    "tip": "Chooses the speaker calibration to use (the left, free-field path).",
+                    "type": "action",
+                },
+                {
+                    "name": "Read Right Cal File",
+                    "tip": "Chooses the calibration of the right path (second speaker), "
+                    "used in binaural modes.",
                     "type": "action",
                 },
                 {"name": "Calibrate", "tip": "Opens the calibration window.", "type": "action"},

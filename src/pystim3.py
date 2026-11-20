@@ -197,6 +197,8 @@ class PyStim:
         self.State.controller = controller
         self.Stimulus = Stimulus_Parameters()  # create an instance of the stimulus
 
+        self.PA5 = None  # attenuator for the left (free-field) path: ao0
+        self.PA5_2 = None  # attenuator for the right path: ao1 (binaural modes only)
         self.find_hardware(
             acquisition_mode=acquisition_mode
         )  # look for the required hardware and make sure we can talk to it.
@@ -267,6 +269,10 @@ class PyStim:
                     )
             if "PA5" in self.State.required_hardware and self.setup_PA5():
                 self.State.hardware.append("PA5")
+            # a second attenuator, for the right path, is requested only for binaural modes
+            if "PA5_2" in self.State.required_hardware:
+                if self.setup_PA5(devnum=2):
+                    self.State.hardware.append("PA5_2")
 
             if "RZ5D" in self.State.required_hardware and self.setup_RZ5D():
                 self.State.hardware.append("RZ5D")
@@ -316,6 +322,9 @@ class PyStim:
         if "PA5" in self.State.hardware:
             if self.PA5 is not None:
                 self.PA5.SetAtten(120.0)
+        if "PA5_2" in self.State.hardware:
+            if self.PA5_2 is not None:
+                self.PA5_2.SetAtten(120.0)
         if "RP21" in self.State.hardware:
             if self.RP21_circuit is not None:
                 self.RP21_circuit.stop()
@@ -359,11 +368,22 @@ class PyStim:
         Parameters
         ----------
         devnum : int (default = 1)
-            The device number to connect to for the attenuator
+            The device number to connect to for the attenuator.
+            1 is the left (free-field) path, self.PA5; 2 is the right path, self.PA5_2.
         """
-
-        self.PA5 = tdt.util.connect_pa5(interface="USB", device_id=1)
-        self.PA5.SetAtten(120.0)  # set all attenuators to maximum attenuation
+        if devnum not in (1, 2):
+            raise ValueError(f"pystim3.setup_PA5: devnum must be 1 or 2, not {devnum!r}")
+        try:
+            pa5 = tdt.util.connect_pa5(interface="USB", device_id=devnum)
+        except Exception as e:
+            if devnum == 1:
+                raise
+            raise IOError(f"A second PA5 (USB device 2) is needed for binaural modes: {e!s}")
+        pa5.SetAtten(120.0)  # set all attenuators to maximum attenuation
+        if devnum == 1:
+            self.PA5 = pa5
+        else:
+            self.PA5_2 = pa5
         return True
 
     def setup_RP21(self, rcofile: str = "", acquisition_mode="abr"):
@@ -476,15 +496,14 @@ class PyStim:
         self.State.debugFlag = False
 
     def setAttens(self, atten_left=120.0, atten_right=120.0):
+        """Set the attenuators of the left (PA5, ao0) and right (PA5_2, ao1) paths.
+        The right one is set only when a second PA5 is in use (binaural modes), so with
+        one attenuator atten_right is ignored, as it always was.
+        """
         if "PA5" in self.State.hardware:
-            # self.PA5.ConnectPA5("USB", 1)
-            # self.PA5.SetAtten(atten_left)
-            # if atten_right is not None:
-            #     self.PA5.ConnectPA5("USB", 2)
-            #     self.PA5.SetAtten(atten_right)
             self.PA5.SetAtten(atten_left)
-            # if atten_right is not None:
-            #     self.PA5_2.SetAtten(atten_right)
+        if "PA5_2" in self.State.hardware:
+            self.PA5_2.SetAtten(atten_right)
 
     def _compute_out_sampling_info(
         self, nstim_wave: int, postduration: float, out_sampleFreq: float
@@ -525,6 +544,7 @@ class PyStim:
         waver=None,
         postduration=0.000,
         attns=[20.0, 20.0],
+        two_channel: bool = False,
     ):
         """
         play_sound sends the sound out to an audio device.
@@ -544,8 +564,18 @@ class PyStim:
             Attenuator settings to use for this stimulus
         storedata : bool (default: True)
             flag to force storage of data at end of run
+        two_channel : bool (default: False)
+            If True, wavel goes to ao0 (left path, PA5 attns[0]) and waver to ao1 (right
+            path, PA5_2 attns[1]), on one clock and trigger. If False, only wavel is
+            output, on ao0, as always (waver is ignored; the free-field callers pass
+            the same wave for both).
 
         """
+        if two_channel:
+            if waver is None or len(waver) != len(wavel):
+                raise ValueError("pystim3.play_sound: two_channel needs left and right waves of the same length")
+            if "PA5" in self.State.hardware and "PA5_2" not in self.State.hardware:
+                raise ValueError("pystim3.play_sound: two_channel output needs the second PA5 (PA5_2)")
 
         # if we are just using pyaudio (linux, MacOS), set it up now
         if "pyaudio" in self.State.hardware:
@@ -601,7 +631,9 @@ class PyStim:
         # to trigger stimulation AND acquistion. When this returns, the
         # sampled data is in self.ch1 and self.ch2, along with a timebase.
 
-        self.acquire_with_devices(wavel, None, timeout=self.rec_dur * 1.5, re_armable=False)
+        self.acquire_with_devices(
+            wavel, waver if two_channel else None, timeout=self.rec_dur * 1.5, re_armable=False
+        )
 
         if "PA5" in self.State.hardware:
             self.setAttens()  # attenuators down (there is noise otherwise)
@@ -638,10 +670,14 @@ class PyStim:
         so we can setup right away.
         """
 
-        self.waveout = wavel
         self.repetitions = repetitions
         self.State.stimulus_count = 0
-        (self.waveout, clipl) = self.clip(self.waveout, 10.0)  # clip the wave if it's >10V
+        if waver is None:  # one channel, ao0 (free-field)
+            (self.waveout, clipl) = self.clip(wavel, 10.0)  # clip the wave if it's >10V
+        else:  # two channels: row 0 is ao0 (left), row 1 is ao1 (right)
+            (left, clipl) = self.clip(wavel, 10.0)
+            (right, clipr) = self.clip(waver, 10.0)
+            self.waveout = np.vstack([left, right])
         self.start_time = time.time()
         self.timeout = timeout
         self.load_and_arm(re_arm=re_armable)
@@ -673,7 +709,9 @@ class PyStim:
             
         """
         with nidaqmx.task.Task("NI_DAC_out") as self.State.NIDAQ_task:
-            channel_name = f"/{self.State.NI_devicename:s}/ao0"
+            # ao0 only, or ao0 and ao1 on the same task (one clock, one start trigger)
+            channels = "ao0:1" if self.waveout.ndim == 2 else "ao0"
+            channel_name = f"/{self.State.NI_devicename:s}/{channels:s}"
             self.State.NIDAQ_task.ao_channels.add_ao_voltage_chan(  # can only do this once...
                 channel_name, min_val=-10.0, max_val=10.0, units=VoltageUnits.VOLTS
             )
@@ -681,7 +719,7 @@ class PyStim:
                 rate=self.Stimulus.NI_out_sampleFreq,
                 source="",
                 sample_mode=AcquisitionType.FINITE,
-                samps_per_chan=len(self.waveout),
+                samps_per_chan=self.waveout.shape[-1],
             )
             self.State.NIDAQ_task.triggers.start_trigger.cfg_dig_edge_start_trig(
                 trigger_source="/Dev1/PFI0",

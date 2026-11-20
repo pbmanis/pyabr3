@@ -38,7 +38,7 @@ import src.read_abr as read_abr
 import src.message_box as MBox
 from src.calibration import cal_chooser, cal_display, calibration_gui
 from src.calibration.hardware import MockCalibrationHardware, PyStimCalibrationHardware
-from src.viewer import abr_files, data_viewer
+from src.viewer import abr_files, bic_viewer, data_viewer
 
 MAX_CLICK = 105.1  # SPL for maximum click
 
@@ -74,13 +74,18 @@ class PyABR(QtCore.QObject):
         )
         # check hardware
         self.hardware, self.sfin, self.sfout = self.PS.getHardware()
-        self.calfile = Path(self.config["calfile"])  # get calibration file
+        # get calibration file ("calfile_left", if present, is the same thing as "calfile")
+        self.calfile = Path(self.config.get("calfile_left", self.config["calfile"]))
         if configtype == "test" and not self.calfile.is_file():
             # the configured path is on the rig: use the copy in the repository or app
             self.calfile = Path("calfiles", "frequency_MF1.cal")
         self.caldata = read_calibration.get_calibration_data(self.calfile)
         now = datetime.datetime.now()
         self.WG = wave_generator.WaveGenerator(caldata=self.caldata)
+        # optional calibration of a separate right speaker (for binaural modes).
+        # Without it, the right ear uses the same calibration as the left.
+        self.calfile_right, self.caldata_right = self.load_right_calibration(configtype)
+        self.WG.caldata_right = self.caldata_right
         self.Presenter = None  # the thread object that will be used for presenting stimuli
         self.cal_window = None  # the calibration window, when it has been opened
         self.data_viewer = None  # the data viewer window, when it has been opened
@@ -182,6 +187,10 @@ class PyABR(QtCore.QObject):
         self.dockArea.addDock(self.Dock_Preview, "below", self.Dock_Recording)
         self.Dock_Calibration = PGD.Dock("Calibration", size=(right_docks_width, 1024))
         self.dockArea.addDock(self.Dock_Calibration, "below", self.Dock_Preview)
+        self.Dock_BIC = PGD.Dock("BIC", size=(right_docks_width, 1024))
+        self.dockArea.addDock(self.Dock_BIC, "below", self.Dock_Calibration)
+        self.bic_panel = bic_viewer.BICPanel(start_dir=self.bic_start_dir)
+        self.Dock_BIC.addWidget(self.bic_panel)
         self.win.setWindowTitle("ABR Acquistion")
         self.win.setGeometry(100, 100, 1200, 1000)
         help_menu = self.win.menuBar().addMenu("Help")
@@ -197,6 +206,7 @@ class PyABR(QtCore.QObject):
             data_path_names=list(self.get_data_paths()),
         )
         self.PR.update_protocol(ptreedata=self.ptreedata)  # show the protocol's values
+        self.update_calibration_labels()
         self.Dock_Params.addWidget(self.ptree)
 
         self.build_recording_graphs()
@@ -299,6 +309,10 @@ class PyABR(QtCore.QObject):
                             self.load_file()
                         case "Read Cal File":
                             self.load_cal_file()
+                            self.update_calibration_labels()
+                        case "Read Right Cal File":
+                            self.load_right_cal_file()
+                            self.update_calibration_labels()
                         case "Calibrate":
                             self.open_calibration()
 
@@ -362,6 +376,30 @@ class PyABR(QtCore.QObject):
         self.show_data_viewer().open_file_dialog()
 
 
+    def bic_start_dir(self) -> str:
+        """Where the BIC panel's file dialog starts: the current run if there is one, otherwise
+        the first data location."""
+        if self.run_directory is not None and Path(self.run_directory).is_dir():
+            return str(self.run_directory)
+        return str(next(iter(self.get_data_paths().values())))
+
+    def load_right_calibration(self, configtype: str):
+        """
+        Read the calibration of the right speaker, if the configuration names one
+        ("calfile_right"). Returns (path, caldata), or (None, None) when the right ear
+        uses the calibration of the left (free-field operation, and the default).
+        Related: wave_generator.WaveGenerator.caldata_for
+        """
+        name = self.config.get("calfile_right")
+        if not name:
+            return None, None
+        path = Path(name)
+        if configtype == "test" and not path.is_file():
+            # the configured path is on the rig: with the test configuration, use the left
+            print(f"Right calibration file {str(path):s} not found; using the left calibration")
+            return None, None
+        return path, read_calibration.get_calibration_data(path)
+
     def load_cal_file(self):
         """
         Choose a calibration file, and use it for stimuli and saved data.
@@ -385,6 +423,34 @@ class PyABR(QtCore.QObject):
         self.caldata = caldata
         self.WG.caldata = self.caldata
         self.Dock_Calibration.raiseDock()
+
+    def load_right_cal_file(self):
+        """
+        Choose the calibration of the right path (second speaker, NI ao1), used in the
+        binaural modes. Until one is chosen (or "calfile_right" is in the configuration)
+        the right path uses the left calibration.
+        Related: load_cal_file, wave_generator.WaveGenerator.caldata_for
+        """
+        current = self.calfile_right if self.calfile_right is not None else self.calfile
+        chosen = cal_chooser.choose_calibration_file(current.parent, current=current, parent=self.win)
+        if chosen is None:
+            return
+        try:
+            caldata = read_calibration.get_calibration_data(chosen)
+            self.calibration_display.show_calibration(chosen, caldata)
+        except Exception as e:  # older or damaged files fail in many different ways
+            MBox.MessageBox(f"Could not read {chosen.name:s}: {e!s}", title="Calibration")
+            return
+        self.calfile_right = chosen
+        self.caldata_right = caldata
+        self.WG.caldata_right = self.caldata_right
+        self.Dock_Calibration.raiseDock()
+
+    def update_calibration_labels(self):
+        """Show which calibration file each output path uses (Calibration group of the tree)."""
+        self.ptreedata.child("Calibration", "Left (free-field) path").setValue(self.calfile.name)
+        right = "same as left" if self.calfile_right is None else self.calfile_right.name
+        self.ptreedata.child("Calibration", "Right path").setValue(right)
 
     def open_calibration(self):
         """
@@ -566,12 +632,22 @@ class PyABR(QtCore.QObject):
         self.acq_mode = mode
         self.Dock_Recording.raiseDock()
         self.app.processEvents()
-        self.PS = pystim3.PyStim(
-            required_hardware=self.config["required_hardware"],
-            ni_devicename=self.config["NI_device"],
-        )
-        self.PS.reset_hardware()
         self.protocol = self.PR.get_current_protocol()  # be sure we have current protocol data
+        mode = protocol_reader.get_mode(self.protocol)
+        required_hardware = protocol_reader.required_hardware_for_mode(
+            self.config["required_hardware"], mode
+        )
+        try:
+            self.PS = pystim3.PyStim(
+                required_hardware=required_hardware,
+                ni_devicename=self.config["NI_device"],
+            )
+        except IOError as e:
+            if mode == "freefield":
+                raise
+            MBox.MessageBox(str(e), title="Hardware")
+            return
+        self.PS.reset_hardware()
         self.TrialCounter = 1
         flist = self.protocol["stimuli"]["freqlist"]
         if self.protocol["protocol"]["stimulustype"] == "click":
@@ -701,6 +777,8 @@ class PyABR(QtCore.QObject):
         wave_copy = copy.deepcopy(self.wave_matrix)
         for k in wave_copy.keys():
             wave_copy[k]["sound"] = {}
+            if "sound_right" in wave_copy[k]:
+                wave_copy[k]["sound_right"] = {}
         out_data = {
             "subject_data": subject_data,
             "calibration": self.caldata,
@@ -712,6 +790,14 @@ class PyABR(QtCore.QObject):
             "record_frequency": self.PS.trueFreq,
             "timestamp": write_time,
         }
+        condition_tags = self.get_condition_tags(wave_counter)
+        if condition_tags is not None:  # not in free-field files, which are unchanged
+            out_data["ear_mode"] = condition_tags.pop("ear_mode")
+            out_data["conditions"] = condition_tags
+            # "calibration" is the left path; the right path may have its own
+            out_data["calibration_right"] = (
+                self.caldata_right if self.caldata_right is not None else self.caldata
+            )
         fn = Path(
             self.run_directory,
             f"{self.basefn:s}_{self.protocol['protocol']['stimulustype']:s}_{wave_counter:03d}_{repetition_counter:03d}.p",
@@ -721,6 +807,36 @@ class PyABR(QtCore.QObject):
             pickle.dump(out_data, fh, protocol=pickle.HIGHEST_PROTOCOL)
         del wave_copy    # delete the wave copy
         return True
+
+    def get_condition_tags(self, wave_counter: int) -> dict | None:
+        """
+        Describe the stimulus conditions of a sweep, to be saved with its data.
+        Returns None in free-field mode, so those files are unchanged.
+
+        For the interleaved BIC the dictionary has "ear_mode" and, for each slot of
+        the sweep: "slot_conditions" ("L", "R" or "B": left, right, binaural),
+        "slot_polarities" (+1 or -1) and "slot_starts" (s, nominal, before the ITD).
+        It also has "itd" (s; positive means the right ear lags), "frequency" (Hz;
+        0 for clicks), "dbspl_left", "dbspl_right" and "attenuation" ([left, right], dB).
+        Related: wave_generator.WaveGenerator._make_bic_interleaved
+        """
+        mode = protocol_reader.get_mode(self.protocol)
+        if mode == "freefield":
+            return None
+        entry = list(self.wave_matrix.values())[wave_counter]
+        tags = {"ear_mode": mode}
+        for key in (
+            "slot_conditions",
+            "slot_polarities",
+            "slot_starts",
+            "itd",
+            "frequency",
+            "dbspl_left",
+            "dbspl_right",
+            "attenuation",
+        ):
+            tags[key] = entry[key]
+        return tags
 
     def clear_average(self):
         """Start a new on-line average; called when a click or tone stimulus changes.

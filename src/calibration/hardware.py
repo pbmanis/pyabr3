@@ -76,13 +76,39 @@ class PyStimCalibrationHardware(CalibrationHardware):
 
     description = "NI / RP2.1 / PA5"
 
-    def __init__(self, config: dict, pystim=None):
+    def __init__(self, config: dict, pystim=None, output_path: str = "left"):
         self.config = config
         self.PS = pystim
         self.rp = None
+        self.output_path = output_path  # "left": ao0 and PA5 (free-field); "right": ao1 and PA5_2
+
+    @property
+    def output_path(self) -> str:
+        return self._output_path
+
+    @output_path.setter
+    def output_path(self, path: str):
+        if path not in ("left", "right"):
+            raise ValueError(f"output_path must be 'left' or 'right', not {path!r}")
+        self._output_path = path
+
+    @property
+    def ao_channel(self) -> str:
+        return "ao1" if self.output_path == "right" else "ao0"
+
+    def _ensure_right_attenuator(self):
+        """The right path needs the second PA5; connect it if the PyStim does not have it."""
+        if self.output_path != "right" or "PA5_2" in self.PS.State.hardware:
+            return
+        try:
+            self.PS.setup_PA5(devnum=2)
+        except IOError as e:
+            raise CalibrationError(str(e))
+        self.PS.State.hardware.append("PA5_2")
 
     def connect(self):
         if self.rp is not None:
+            self._ensure_right_attenuator()  # the path may have been changed since the last run
             return
         from src import pystim3
 
@@ -106,9 +132,14 @@ class PyStimCalibrationHardware(CalibrationHardware):
         self.rp = self.PS.RP21_circuit._iface  # calls below are those made in MATLAB
         self._load_cof()
         self.ni_freq = float(self.PS.Stimulus.NI_out_sampleFreq)
+        self._ensure_right_attenuator()
 
     def _set_attn(self, attn: float):
-        self.PS.setAttens(atten_left=attn, atten_right=attn)
+        """Set the attenuator of the output path; the other path (if there is one) is at maximum."""
+        if self.output_path == "right":
+            self.PS.setAttens(atten_left=MAX_ATTN, atten_right=attn)
+        else:
+            self.PS.setAttens(atten_left=attn, atten_right=attn)
 
     def _load_cof(self):
         if self.rp.ClearCOF() == 0:
@@ -141,7 +172,10 @@ class PyStimCalibrationHardware(CalibrationHardware):
         wave, _ = self.PS.clip(wave, 10.0)
         with P.nidaqmx.task.Task("NI_DAC_out") as task:
             task.ao_channels.add_ao_voltage_chan(
-                f"/{device:s}/ao0", min_val=-10.0, max_val=10.0, units=P.VoltageUnits.VOLTS
+                f"/{device:s}/{self.ao_channel:s}",
+                min_val=-10.0,
+                max_val=10.0,
+                units=P.VoltageUnits.VOLTS,
             )
             task.timing.cfg_samp_clk_timing(
                 rate=self.ni_freq,

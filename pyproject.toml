@@ -61,6 +61,13 @@ addopts = "-ra -q --confcutdir=tests"
 testpaths = [
     "tests/test_calibration.py",
     "tests/test_viewer.py",
+    "tests/test_freefield_baseline.py",
+    "tests/test_per_ear_calibration.py",
+    "tests/test_two_channel_output.py",
+    "tests/test_bic_waveforms.py",
+    "tests/test_bic_acquisition.py",
+    "tests/test_bic_viewer.py",
+    "tests/test_binaural_gui.py",
     ]
 
 

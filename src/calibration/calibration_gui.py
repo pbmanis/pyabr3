@@ -139,6 +139,13 @@ class CalibrationWindow(QtWidgets.QMainWindow):
                         "limits": list(engine.SPEAKERS),
                         "value": "MF1",
                     },
+                    {
+                        # left is ao0 + PA5 #1: the path used for free-field. right is ao1 + PA5 #2
+                        "name": "Output path",
+                        "type": "list",
+                        "limits": ["left (free-field)", "right"],
+                        "value": "left (free-field)",
+                    },
                     {"name": "Frequencies (kHz)", "type": "str", "value": ""},
                     {"name": "Ref SPL (maxtones)", "type": "float", "value": 110.0},
                     {"name": "Cal directory", "type": "str", "value": str(self.default_cal_dir())},
@@ -335,6 +342,7 @@ class CalibrationWindow(QtWidgets.QMainWindow):
             return
         cal_dir = Path(self.value("Setup", "Cal directory"))
         try:
+            self.hw.output_path = "right" if self.value("Setup", "Output path") == "right" else "left"
             self.hw.connect()
             if self.hw.is_mock:
                 cal_dir.mkdir(parents=True, exist_ok=True)

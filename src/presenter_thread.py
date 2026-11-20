@@ -222,14 +222,24 @@ class Presenter(QObject):  # (QtCore.QRunnable):
                 self._finished = True
                 self._running = False
                 return True
-            wave = self.wave_matrix[self.wavekeys[self.wave_counter]]["sound"]
-            attn = self.wave_matrix[self.wavekeys[self.wave_counter]]["attenuation"][0]
+            entry = self.wave_matrix[self.wavekeys[self.wave_counter]]
+            wave = entry["sound"]
+            attn = entry["attenuation"][0]
 
-            self.sound_class.play_sound(
-                wave,
-                wave,
-                attns=[attn, attn],  # set both attenuators
-            )
+            if "sound_right" in entry:  # the binaural modes
+                # left wave and attenuation on ao0/PA5, right wave and attenuation on ao1/PA5_2
+                self.sound_class.play_sound(
+                    wave,
+                    entry["sound_right"],
+                    attns=entry["attenuation"],
+                    two_channel=True,
+                )
+            else:
+                self.sound_class.play_sound(
+                    wave,
+                    wave,
+                    attns=[attn, attn],  # set both attenuators
+                )
             return self.retrieve_data()
 
         else:  # all other stimuli.
