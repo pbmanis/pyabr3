@@ -78,6 +78,7 @@ import numpy as np
 SWEEP_POLL_S = 0.005  # polling interval (s) while waiting for the RP2.1 sweep to fill
 DATA_READY_SETTLE_S = 0.002  # wait (s) after data_ready for the last samples to be stored
 DATA_READY_RESET_S = 0.05  # time (s) allowed for the reset trigger to clear data_ready
+DATA_READY_CLEAR_S = 0.1  # time (s) allowed for the start trigger to clear data_ready
 CIRCUIT_TAGS = ("sampled_wave", "sampled_wave_n", "data_ready", "compare_count")  # the abr circuit needs
 
 
@@ -757,6 +758,9 @@ class PyStim:
                 self.RP21_circuit.cset_tag("record_dur_n", recdur, "s", "n")
                 self.RP21_circuit.cset_tag("play_dur_n", 1, "ms", "n")
                 self.databuffer = self.RP21_circuit.get_buffer("sampled_wave", "r")
+                # before the circuit starts, so that the default (0) does not match the idle
+                # buffer index (0) and set data_ready at once
+                self.RP21_circuit.set_tag("compare_count", self._compare_count())
 
                 self.RP21_circuit.start(0.25)  # start, but wait a bit...
                 self.ch1 = self._acquire_sweep()  # None if the sweep was not captured
@@ -776,6 +780,25 @@ class PyStim:
         self.State.NIDAQ_task = None
 
         return True
+
+    def _compare_count(self) -> int:
+        """The value of compare_count at which data_ready is set: the last index of the buffer,
+        in raw index units (samples * channels / compression), which works with an EQ or a
+        GE test in the circuit."""
+        buf = self.databuffer
+        n = int(self.acquisition_points)
+        return int(round(n * getattr(buf, "channels", 1) / getattr(buf, "compression", 1))) - 1
+
+    def _wait_for_data_ready_to_clear(self, t0: float, n: int) -> float | None:
+        """After the start trigger, wait for a data_ready that is still set to clear, for up to
+        DATA_READY_CLEAR_S (or half of the sweep, if that is shorter). Returns the time it took
+        in ms, or None if it did not clear."""
+        window = min(DATA_READY_CLEAR_S, 0.5 * n / float(self.Stimulus.RP21_in_sampleFreq))
+        while (time.time() - t0) < window:
+            if not self.RP21_circuit.get_tag("data_ready"):
+                return (time.time() - t0) * 1000.0
+            time.sleep(0.001)
+        return None
 
     def _reset_data_ready(self):
         """Fire the reset trigger (Stimulus.RP21_ResetTrigger), if there is one, and check that
@@ -821,11 +844,9 @@ class PyStim:
         buf = self.databuffer
         timeout = n / float(self.Stimulus.RP21_in_sampleFreq) * 1.5 + 0.5
         circuit = self.RP21_circuit
-        # data_ready is set when the buffer index reaches compare_count. The index tag is in
-        # raw units (samples * channels / compression); the last index is raw_n - 1, which
-        # works with an EQ or a GE test in the circuit.
-        raw_n = int(round(n * getattr(buf, "channels", 1) / getattr(buf, "compression", 1)))
-        circuit.set_tag("compare_count", raw_n - 1)
+        # data_ready is set when the buffer index reaches compare_count (also set in
+        # load_and_arm, before the circuit starts)
+        circuit.set_tag("compare_count", self._compare_count())
         buf.reset_read(0)
         self._reset_data_ready()
         ready_before = bool(circuit.get_tag("data_ready"))
@@ -833,13 +854,16 @@ class PyStim:
         circuit.trigger(self.Stimulus.RP21_TriggerSource)  # must also reset data_ready
         ready_after = bool(circuit.get_tag("data_ready"))
         if ready_after:  # a sweep takes many ms, so it cannot be complete yet
-            raise CircuitError(
-                "data_ready is still set just after the start trigger "
-                f"(before the trigger: {ready_before}; compare_count: "
-                f"{circuit.get_tag('compare_count')}; buffer index: {buf.write_index}). "
-                "The circuit must clear it on the start trigger, or Stimulus.RP21_ResetTrigger "
-                "must name a trigger that does."
-            )
+            cleared_ms = self._wait_for_data_ready_to_clear(t0, n)
+            if cleared_ms is None:
+                raise CircuitError(
+                    "data_ready stayed set after the start trigger "
+                    f"(before the trigger: {ready_before}; compare_count: "
+                    f"{circuit.get_tag('compare_count')}; buffer index: {buf.write_index}). "
+                    "The circuit must clear it on the start trigger, or "
+                    "Stimulus.RP21_ResetTrigger must name a trigger that does."
+                )
+            print(f"data_ready cleared {cleared_ms:.1f} ms after the start trigger")
         done = False
         n_polls = 0
         while (time.time() - t0) < timeout:

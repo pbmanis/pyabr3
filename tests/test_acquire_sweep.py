@@ -34,11 +34,15 @@ class FakeCircuit:
     """data_ready is high once a sweep has been recorded. A trigger named in reset_by
     clears it (the circuit's reset); stuck means that nothing clears it."""
 
-    def __init__(self, reset_by=("B",), stuck=False, never=False, tags=("data_ready", "compare_count")):
+    def __init__(
+        self, reset_by=("B",), stuck=False, never=False, clear_delay=0.0, tags=("data_ready", "compare_count")
+    ):
         self.tags = {t: 0 for t in tags}
         self.reset_by = reset_by
         self.stuck = stuck
         self.never = never
+        self.clear_delay = clear_delay  # s from the reset trigger to the flag clearing
+        self.clear_at = None
         self.t_sweep = None  # start of the sweep being recorded
         self.flag = False  # the latched flag, as left by the previous sweep
         self.triggers = []
@@ -51,6 +55,9 @@ class FakeCircuit:
         if name not in self.tags:
             raise KeyError(name)
         if name == "data_ready":
+            if self.clear_at is not None and time.time() >= self.clear_at:
+                self.flag = False
+                self.clear_at = None
             elapsed = self.elapsed()
             if elapsed is not None and elapsed >= N / RATE and not self.never:
                 self.flag = True
@@ -66,7 +73,10 @@ class FakeCircuit:
     def trigger(self, name):
         self.triggers.append(name)
         if name in self.reset_by and not self.stuck:
-            self.flag = False
+            if self.clear_delay > 0.0:
+                self.clear_at = time.time() + self.clear_delay
+            else:
+                self.flag = False
         if name == "B":  # the start trigger: the sweep begins
             self.t_sweep = time.time()
 
@@ -142,7 +152,7 @@ def test_a_flag_that_the_start_trigger_does_not_clear_is_an_error():
     circuit = FakeCircuit(stuck=True)
     circuit.flag = True  # left set by the last sweep, as on the rig
     ps = make_ps(circuit)
-    with pytest.raises(pystim3.CircuitError, match="still set just after the start trigger") as e:
+    with pytest.raises(pystim3.CircuitError, match="stayed set after the start trigger") as e:
         ps._acquire_sweep()
     assert "before the trigger: True" in str(e.value)
     assert ps.databuffer.calls == [("reset_read", 0)]  # nothing was read
@@ -268,3 +278,100 @@ def test_the_window_stops_and_shows_the_circuit_error(monkeypatch):
     app = SimpleNamespace(stop=lambda: events.append(("stop",)))
     pyabr3.PyABR.hardware_error(app, "the circuit is wrong")
     assert events == [("stop",), ("box", "the circuit is wrong", "Hardware")]
+
+
+# --- a slow reset, and compare_count before the circuit starts ----------------------------
+
+
+def test_a_flag_that_clears_a_little_after_the_trigger_is_waited_for(capsys):
+    circuit = FakeCircuit(clear_delay=0.003)  # the sweep takes 10 ms: half of it is allowed
+    circuit.flag = True
+    ps = make_ps(circuit)
+    data = ps._acquire_sweep()
+    assert data is not None and len(data) == N
+    assert "data_ready cleared" in capsys.readouterr().out
+
+
+def test_the_wait_for_the_flag_to_clear_is_limited_to_half_the_sweep():
+    circuit = FakeCircuit(clear_delay=0.5)  # far too slow
+    circuit.flag = True
+    ps = make_ps(circuit)
+    t0 = time.time()
+    with pytest.raises(pystim3.CircuitError, match="stayed set"):
+        ps._acquire_sweep()
+    assert time.time() - t0 < 0.1  # 0.5 * 10 ms, not the whole 0.1 s allowed for long sweeps
+
+
+def test_compare_count_in_raw_units_for_the_buffer():
+    ps = make_ps(FakeCircuit(), channels=1, compression=1)
+    assert ps._compare_count() == N - 1
+    ps = make_ps(FakeCircuit(), channels=2, compression=1)
+    assert ps._compare_count() == 2 * N - 1
+    ps = make_ps(FakeCircuit(), channels=1, compression=2)
+    assert ps._compare_count() == N // 2 - 1
+
+
+class FakeTask:
+    def __init__(self, name):
+        self.ao_channels = SimpleNamespace(add_ao_voltage_chan=lambda *a, **k: None)
+        self.timing = SimpleNamespace(cfg_samp_clk_timing=lambda **k: None)
+        self.triggers = SimpleNamespace(start_trigger=SimpleNamespace(cfg_dig_edge_start_trig=lambda **k: None))
+
+    def write(self, data):
+        pass
+
+    def start(self):
+        pass
+
+    def is_task_done(self):
+        return True
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+
+class RigCircuit(FakeCircuit):
+    """A circuit that also records the order of what load_and_arm does to it."""
+
+    def __init__(self):
+        super().__init__(tags=("data_ready", "compare_count", "sampled_wave_n"))
+        self.events = []
+        self.buffer = None
+
+    def set_tag(self, name, value):
+        self.events.append(("set", name, value))
+        super().set_tag(name, value)
+
+    def cset_tag(self, *args):
+        self.events.append(("cset", args[0]))
+
+    def get_buffer(self, name, mode):
+        return self.buffer
+
+    def start(self, *args):
+        self.events.append(("start",))
+
+    def stop(self):
+        self.events.append(("stop",))
+
+
+def test_compare_count_is_set_before_the_circuit_starts(monkeypatch):
+    circuit = RigCircuit()
+    ps = make_ps(circuit)
+    circuit.buffer = ps.databuffer
+    ps.State = pystim3.Stimulus_Status()
+    ps.State.hardware = ["NIDAQ", "RP21"]
+    ps.State.NI_devicename = "Dev1"
+    ps.waveout = np.zeros(100)
+    monkeypatch.setattr(pystim3, "nidaqmx", SimpleNamespace(task=SimpleNamespace(Task=FakeTask)), raising=False)
+    monkeypatch.setattr(pystim3, "AcquisitionType", SimpleNamespace(FINITE=1), raising=False)
+    monkeypatch.setattr(pystim3, "Edge", SimpleNamespace(RISING=1), raising=False)
+    monkeypatch.setattr(pystim3, "VoltageUnits", SimpleNamespace(VOLTS=1), raising=False)
+    ps.load_and_arm()
+    names = [e for e in circuit.events if e[0] in ("start", "stop") or e[:2] == ("set", "compare_count")]
+    assert names[0] == ("set", "compare_count", N - 1)  # before the circuit starts
+    assert names[1] == ("start",)
+    assert ps.ch1 is not None and len(ps.ch1) == N
