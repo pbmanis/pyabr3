@@ -552,3 +552,60 @@ def test_an_empty_sweep_is_an_error_too(monkeypatch):
     assert pyabr3.PyABR.update_ABR(app, np.array([np.zeros(0), np.zeros(0)]), 0, 1) is False
     assert app.events == ["stop"]
     assert "0 samples, but 100 were expected" in messages[0]
+
+
+# --- the buffer in the circuit must be able to hold the sweep -----------------------------
+
+
+def ps_with_buffer(n, fs, **buffer_attributes):
+    ps = pystim3.PyStim.__new__(pystim3.PyStim)
+    ps.Stimulus = pystim3.Stimulus_Parameters()
+    ps.Stimulus.RP21_in_sampleFreq = fs
+    ps.acquisition_points = n
+    ps.databuffer = SimpleNamespace(**buffer_attributes)
+    return ps
+
+
+def test_a_buffer_that_is_too_small_for_the_sweep_is_an_error_that_gives_the_sizes():
+    # the rig: a 1.2 s waveform is 29696 samples, but the SerStore holds 26624 (1.0905 s)
+    ps = ps_with_buffer(29696, 24414.0625, size_max=26624, size=29696)
+    with pytest.raises(pystim3.CircuitError) as e:
+        ps._check_buffer_size()
+    message = str(e.value)
+    assert "29696 samples (1.2163 s)" in message
+    assert "holds only 26624 samples (1.0905 s)" in message
+    assert "wave_duration 1.090 s or less" in message
+
+
+@pytest.mark.parametrize("size_max", [29696, 32768])
+def test_a_buffer_that_is_large_enough_is_accepted(size_max):
+    ps_with_buffer(29696, 24414.0625, size_max=size_max, size=29696)._check_buffer_size()
+
+
+def test_a_size_tag_that_reads_back_differently_is_an_error():
+    ps = ps_with_buffer(29696, 24414.0625, size_max=32768, size=26624)
+    with pytest.raises(pystim3.CircuitError, match="reads back as 26624, but 29696 was set"):
+        ps._check_buffer_size()
+
+
+def test_a_buffer_without_size_information_is_not_checked():
+    ps_with_buffer(29696, 24414.0625)._check_buffer_size()
+
+
+def test_the_circuit_is_not_started_if_the_buffer_is_too_small(monkeypatch):
+    circuit = RigCircuit()
+    ps = make_ps(circuit)
+    circuit.buffer = ps.databuffer
+    ps.databuffer.size_max = N - 1024
+    ps.databuffer.size = N
+    ps.State = pystim3.Stimulus_Status()
+    ps.State.hardware = ["NIDAQ", "RP21"]
+    ps.State.NI_devicename = "Dev1"
+    ps.waveout = np.zeros(100)
+    monkeypatch.setattr(pystim3, "nidaqmx", SimpleNamespace(task=SimpleNamespace(Task=FakeTask)), raising=False)
+    monkeypatch.setattr(pystim3, "AcquisitionType", SimpleNamespace(FINITE=1), raising=False)
+    monkeypatch.setattr(pystim3, "Edge", SimpleNamespace(RISING=1), raising=False)
+    monkeypatch.setattr(pystim3, "VoltageUnits", SimpleNamespace(VOLTS=1), raising=False)
+    with pytest.raises(pystim3.CircuitError, match="holds only"):
+        ps.load_and_arm()
+    assert ("start",) not in circuit.events

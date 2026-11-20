@@ -83,6 +83,54 @@ MAX_TRAILING_ZEROS = 16  # a sweep ending in more exact zeros than this was not 
 CIRCUIT_TAGS = ("sampled_wave", "sampled_wave_n", "data_ready", "compare_count")  # the abr circuit needs
 
 
+RECORD_BLOCK = 1024  # a record is a whole number of blocks of this many samples
+
+
+def recording_points(duration: float, sample_rate: float, block_size: int = RECORD_BLOCK) -> int:
+    """Samples recorded for a waveform of this duration (s): duration * sample_rate, rounded
+    up to a whole multiple of block_size. For example 1.2 s at 24414.0625 Hz is 29297
+    samples, so 29696 (29 blocks)."""
+    points = waveform_samples(duration, sample_rate)
+    return int(np.ceil(points / block_size)) * block_size
+
+
+def waveform_samples(duration: float, sample_rate: float) -> int:
+    """The number of samples in a waveform of this duration (s), rounded up. A tolerance of a
+    millionth of a sample keeps a duration that is exactly a whole number of samples (such as
+    the longest that fits in a buffer) from being rounded up by floating point error."""
+    return int(np.ceil(duration * sample_rate - 1e-6))
+
+
+def longest_recording(capacity: int, sample_rate: float, block_size: int = RECORD_BLOCK) -> float:
+    """The longest waveform (s) whose record fits in a buffer of capacity samples: the
+    largest whole number of blocks that fits, divided by the sample rate. A buffer of
+    26624 samples holds 1.0905 s at 24414.0625 Hz; one of 256000 holds 10.486 s."""
+    return (capacity // block_size) * block_size / sample_rate
+
+
+def buffer_too_small_message(needed: int, capacity: int, sample_rate: float, duration=None) -> str:
+    """The message for a record that does not fit in the buffer of the circuit, with the
+    calculation, so that the user can see what to change."""
+    longest = longest_recording(capacity, sample_rate)
+    sweep = (
+        f"a waveform of {duration:.3f} s at {sample_rate:.4f} Hz is "
+        f"{waveform_samples(duration, sample_rate):d} samples, rounded up to a multiple of "
+        f"{RECORD_BLOCK:d}: "
+        if duration is not None
+        else ""
+    )
+    return (
+        f"The recording does not fit in the buffer of the RP2.1 circuit: {sweep}the sweep "
+        f"needs {needed:d} samples ({needed / sample_rate:.4f} s), but the buffer "
+        f"'sampled_wave' holds only {capacity:d} samples ({capacity / sample_rate:.4f} s). "
+        "The size of the buffer is set when the circuit is designed (the Size of the SerStore "
+        "in RPvdsEx), not by the program. Either make the protocol's wave_duration "
+        f"{np.floor(longest * 1000.0) / 1000.0:.3f} s or less (at this sample rate), or make "
+        f"the SerStore at least {needed:d} samples (words) in the circuit, if the RP2.1 memory "
+        "allows. See the Recording section of the manual."
+    )
+
+
 class CircuitError(IOError):
     """The RP2.1 circuit does not behave as the acquisition needs (missing tags, or the
     sweep-done flag is not reset by the start trigger). It is a hardware setup problem,
@@ -545,12 +593,8 @@ class PyStim:
         
         if self.stim_dur is None:
             raise ValueError("Stimulus duration must be st before computing acquisition points")
-        self.acquisition_points = int(np.ceil(self.stim_dur * in_sampleFreq))
-        # make acquisition a multiple of 1024 points
-        n = int(self.acquisition_points / block_size)
-        if self.acquisition_points % block_size > 0:
-            n = n + 1
-        self.acquisition_points = n * block_size
+        # a whole number of blocks (of 1024 points)
+        self.acquisition_points = recording_points(self.stim_dur, in_sampleFreq, block_size)
         self.rec_dur = self.acquisition_points/in_sampleFreq
         self.t_record = np.linspace(
             0,
@@ -759,6 +803,7 @@ class PyStim:
                 self.RP21_circuit.cset_tag("record_dur_n", recdur, "s", "n")
                 self.RP21_circuit.cset_tag("play_dur_n", 1, "ms", "n")
                 self.databuffer = self.RP21_circuit.get_buffer("sampled_wave", "r")
+                self._check_buffer_size()
                 # before the circuit starts, so that the default (0) does not match the idle
                 # buffer index (0) and set data_ready at once
                 self.RP21_circuit.set_tag("compare_count", self._compare_count())
@@ -781,6 +826,54 @@ class PyStim:
         self.State.NIDAQ_task = None
 
         return True
+
+    def _check_buffer_size(self):
+        """Check that the buffer in the circuit can hold a sweep.
+
+        Bug: the SerStore of the circuit holds 26624 samples (1.0905 s at 24.4 kHz), but a
+        1.2 s waveform needs 29696. The index still counted to the end of the sweep, so
+        data_ready came, but the samples after 26624 were not stored (the data from
+        1090.55 ms repeated the start of the buffer). The size the circuit can hold
+        (buffer.size_max, from the compiled circuit) is now checked against
+        acquisition_points when the circuit is armed (load_and_arm): CircuitError. The cure
+        is a larger SerStore in the circuit (RPvds), or a shorter wave_duration in the
+        protocol.
+        """
+        buf = self.databuffer
+        n = int(self.acquisition_points)
+        fs = float(self.Stimulus.RP21_in_sampleFreq)
+        size_max = getattr(buf, "size_max", None)
+        if size_max is not None and size_max < n:
+            raise CircuitError(buffer_too_small_message(n, int(size_max), fs))
+        size = getattr(buf, "size", None)
+        if size is not None and size != n:
+            raise CircuitError(
+                f"The buffer size tag (sampled_wave_n) reads back as {size:d}, but {n:d} was set"
+            )
+
+    def buffer_capacity(self) -> int:
+        """The number of samples (per channel) that the buffer 'sampled_wave' of the circuit
+        can hold: its size as compiled into the circuit (SerStore Size, in RPvdsEx), which is
+        the limit whatever the sampled_wave_n tag is set to. Read from the circuit."""
+        return int(self.RP21_circuit.get_buffer("sampled_wave", "r").size_max)
+
+    def check_recording_fits(self, duration: float):
+        """Check, before an acquisition starts, that a record of a waveform of this duration (s),
+        at the sample rate of the RP2.1, fits in the buffer of the circuit.
+
+        The record is duration * sample rate samples rounded up to a whole multiple of 1024
+        (recording_points), and must not be more than buffer_capacity. If it is, CircuitError
+        gives the sizes and what to change (the duration, or the size of the SerStore in the
+        circuit). Does nothing without the RP2.1. load_and_arm checks again when it arms the
+        circuit (_check_buffer_size).
+        """
+        if "RP21" not in self.State.hardware:
+            return
+        fs = float(self.Stimulus.RP21_in_sampleFreq)
+        needed = recording_points(duration, fs)
+        capacity = self.buffer_capacity()
+        if needed > capacity:
+            raise CircuitError(buffer_too_small_message(needed, capacity, fs, duration))
 
     def _compare_count(self) -> int:
         """The value of compare_count at which data_ready is set: the last index of the buffer,

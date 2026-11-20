@@ -332,6 +332,11 @@ class PyABR(QtCore.QObject):
         if not atexit:
             exit()
 
+    def longest_waveform_duration(self) -> float:
+        """The duration (s) of the longest waveform of the protocol, which sets the length of
+        the record. Related: pystim3.PyStim.check_recording_fits."""
+        return max(len(entry["sound"]) / entry["rate"] for entry in self.wave_matrix.values())
+
     def sweep_length_error(self, got: int, expected: int):
         """A sweep has the wrong length: stop and say so.
 
@@ -695,6 +700,11 @@ class PyABR(QtCore.QObject):
                 "and save this as a new protocol.",
                 title="Protocol",
             )
+            return
+        try:  # the longest waveform must fit in the buffer of the RP2.1 circuit
+            self.PS.check_recording_fits(self.longest_waveform_duration())
+        except pystim3.CircuitError as e:
+            MBox.MessageBox(str(e), title="Recording length")
             return
         if mode == "collect":
             self.basefn = datetime.datetime.now().strftime("%Y-%m-%d")

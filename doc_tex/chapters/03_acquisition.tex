@@ -184,3 +184,87 @@ The RP2.1 records at 24414.0625~Hz. The length of a record is that of the wavefo
 rounded up to a whole multiple of 1024 samples. Nothing is filtered during acquisition,
 beyond any filtering in the amplifier. Filtering for display is applied when viewing
 (Chapter~\ref{ch:viewing}).
+
+\subsection{The record must fit in the buffer of the circuit}
+\label{sec:record-buffer}
+\index{buffer}\index{SerStore}\index{recording does not fit}\index{wave\_duration}
+
+The ABR is stored in the buffer \texttt{sampled\_wave} of the RP2.1 circuit, a SerStore
+component. \emph{The size of this buffer is fixed when the circuit is designed.} It is
+the \emph{Size} of the SerStore in RPvdsEx, in 32-bit words, and the program cannot make it
+larger. (The program writes the number of samples to the tag \texttt{sampled\_wave\_n},
+which is connected to the Size input in the circuit, but the memory of the buffer is
+allocated when the circuit is built. The program therefore uses the size compiled into
+the circuit, which it reads from the circuit.) A record that is longer than the buffer
+cannot be stored. When this happened on the rig (a 1.2~s record, 29696 samples, with a
+buffer of 26624 samples), the data from 1090.55~ms to the end of the record repeated the
+beginning of the buffer: the length was right, but the data were not valid.
+
+\paragraph{The check.} When \gui{Test Acquisition} or \gui{Start Acquisition} is pressed,
+the program works out the record needed for the longest waveform in the protocol and
+compares it with the size of the buffer, read from the circuit. If it does not fit, a
+message ``The recording does not fit in the buffer of the RP2.1 circuit'' gives the
+sizes and what to change, nothing is presented, and no folder is created. The same check
+is made again when each sweep is armed.
+
+\paragraph{The calculation.}
+\begin{enumerate}
+\item Samples $=$ waveform duration $\times$ sample rate (24414.0625~Hz), rounded up to a
+  whole number.
+\item Rounded up to a whole multiple of 1024. This is the record, and the number of
+  samples the program asks for.
+\item The record must be no more than the size of the buffer.
+\end{enumerate}
+The longest waveform that fits is therefore
+$\lfloor \mathrm{size}/1024 \rfloor \times 1024 / \mathrm{sample\ rate}$.
+
+\begin{center}
+\begin{tabular}{@{}rrrr@{}}
+\toprule
+Waveform (s) & Samples & Record (samples) & Record (s) \\
+\midrule
+0.645 (interleaved plateau) & 15748 & 16384 $= 16 \times 1024$ & 0.671 \\
+1.05 & 25635 & 26624 $= 26 \times 1024$ & 1.0905 \\
+1.2 (clicks and tone pips as supplied) & 29297 & 29696 $= 29 \times 1024$ & 1.2163 \\
+2 & 48829 & 49152 $= 48 \times 1024$ & 2.0133 \\
+5 & 122071 & 122880 $= 120 \times 1024$ & 5.0332 \\
+10 & 244141 & 244736 $= 239 \times 1024$ & 10.0244 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{@{}rrrr@{}}
+\toprule
+Buffer (samples) & 24414.0625~Hz & 48828.125~Hz & 97656.25~Hz \\
+\midrule
+26624 & 1.0905~s & 0.5453~s & 0.2726~s \\
+256000 & 10.4858~s & 5.2429~s & 2.6214~s \\
+\bottomrule
+\end{tabular}
+\end{center}
+The second table is the longest waveform that fits, for the two sizes that the circuit has
+had. It shows that doubling the sample rate halves the longest record. The ABR is recorded
+at 24414.0625~Hz (set in \texttt{setup\_RP21} in \file{pystim3.py}).
+
+\paragraph{When the record is too long.} There are two cures.
+\begin{itemize}
+\item Make the protocol's \key{wave\_duration} short enough, using the calculation
+  above. A protocol whose last stimulus ends at 1~s needs a waveform of a little more
+  than that, not 1.2~s.
+\item Make the buffer larger in the circuit. Open the circuit file that is loaded
+  (\file{abrs\_v3.rcx} in \file{tdt\_circuits}, named in \texttt{find\_hardware} in
+  \file{pystim3.py}) in RPvdsEx, and set the \emph{Size} of the SerStore that holds
+  \texttt{sampled\_wave} to at least the record that is needed, in samples. For one
+  channel stored as 32-bit floating point numbers, a word is a sample, and takes 4
+  bytes. For example, a Size of 256000 is 1,024,000 bytes (about 1~MB), and holds
+  10.4858~s at 24414.0625~Hz. For a 5~s waveform the record is 122880 samples, so a Size
+  of 122880 or more is needed; for a waveform at four times the sample rate, the Size
+  must be four times larger for the same duration. If the SerStore holds several
+  channels, or compressed data, the number of samples per channel is the number of
+  words $\times$ the compression $/$ the number of channels; the program takes this into
+  account when it reads the size.
+\end{itemize}
+The memory of the RP2.1 is limited, and the other buffers in the circuit use it as well.
+RPvdsEx shows the memory use of the circuit, which must not be exceeded. After the
+circuit is changed, the program reads the new size when it is next started.
